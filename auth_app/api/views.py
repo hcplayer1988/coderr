@@ -1,16 +1,15 @@
 """Views for authentication API endpoints."""
-from rest_framework import status
-from rest_framework.views import APIView
+from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
 from django.contrib.auth import get_user_model
-from .serializers import RegistrationSerializer
+from .serializers import RegistrationSerializer, LoginSerializer
 
 User = get_user_model()
 
 
-class RegistrationView(APIView):
+class RegistrationView(generics.GenericAPIView):
     """
     API endpoint for user registration.
     Creates a new user (customer or business) and returns authentication token.
@@ -19,6 +18,7 @@ class RegistrationView(APIView):
     """
     
     permission_classes = [AllowAny]
+    serializer_class = RegistrationSerializer
     
     def post(self, request):
         """
@@ -37,7 +37,7 @@ class RegistrationView(APIView):
             500: Internal server error
         """
         try:
-            serializer = RegistrationSerializer(data=request.data)
+            serializer = self.get_serializer(data=request.data)
             
             if serializer.is_valid():
                 # Create user
@@ -66,3 +66,61 @@ class RegistrationView(APIView):
                 {'error': 'Internal server error', 'detail': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class LoginView(generics.GenericAPIView):
+    """
+    API endpoint for user login.
+    Authenticates user and returns authentication token.
+    
+    POST /api/login/
+    """
+    
+    permission_classes = [AllowAny]
+    serializer_class = LoginSerializer
+    
+    def post(self, request):
+        """
+        Authenticate user and return token.
+        
+        Request Body:
+            - username: string (required)
+            - password: string (required)
+        
+        Returns:
+            200: Successful authentication with token
+            400: Invalid credentials or validation errors
+            500: Internal server error
+        """
+        try:
+            serializer = self.get_serializer(data=request.data)
+            
+            if serializer.is_valid():
+                # Get authenticated user from serializer
+                user = serializer.validated_data['user']
+                
+                # Get or create token for the user
+                token, created = Token.objects.get_or_create(user=user)
+                
+                # Prepare success response
+                response_data = {
+                    'token': token.key,
+                    'username': user.username,
+                    'email': user.email,
+                    'user_id': user.id
+                }
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+            
+            else:
+                # Return validation errors
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            # Handle unexpected errors
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+

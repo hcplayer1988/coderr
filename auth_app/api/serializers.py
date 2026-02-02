@@ -1,6 +1,6 @@
 """Serializers for authentication API endpoints."""
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from rest_framework.authtoken.models import Token
 
 User = get_user_model()
@@ -70,3 +70,47 @@ class RegistrationSerializer(serializers.ModelSerializer):
         )
         
         return user
+
+
+class LoginSerializer(serializers.Serializer):
+    """
+    Serializer for user login.
+    Authenticates user with username and password.
+    """
+    
+    username = serializers.CharField(required=True)
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    
+    def validate(self, data):
+        """
+        Validate username and password.
+        Authenticate user and attach user object to validated_data.
+        """
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            raise serializers.ValidationError({
+                'detail': 'Username and password are required.'
+            })
+        
+        # Authenticate user
+        user = authenticate(username=username, password=password)
+        
+        if user is None:
+            raise serializers.ValidationError({
+                'detail': 'Invalid credentials.'
+            })
+        
+        if not user.is_active:
+            raise serializers.ValidationError({
+                'detail': 'User account is disabled.'
+            })
+        
+        # Attach user to validated data for use in view
+        data['user'] = user
+        return data
