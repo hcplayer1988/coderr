@@ -336,6 +336,160 @@ class ProfileUpdateTests(APITestCase):
         self.assertEqual(response.data['last_name'], '')
         self.assertEqual(response.data['location'], '')
         self.assertEqual(response.data['tel'], '')
+
+
+class BusinessProfileListTests(APITestCase):
+    """Test cases for business profile list endpoint."""
+    
+    def setUp(self):
+        """Set up test client and test users."""
+        self.client = APIClient()
         
+        # Create test users
+        self.customer = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer_token = Token.objects.create(user=self.customer)
         
+        # Create multiple business users
+        self.business1 = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business1.profile.first_name = 'Business'
+        self.business1.profile.last_name = 'One'
+        self.business1.profile.save()
         
+        self.business2 = User.objects.create_user(
+            username='business2',
+            email='business2@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business2.profile.first_name = 'Business'
+        self.business2.profile.last_name = 'Two'
+        self.business2.profile.save()
+    
+    def test_list_business_profiles_success(self):
+        """Test listing all business profiles."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('business-profiles')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+        self.assertEqual(len(response.data), 2)
+        
+        # Check that all returned profiles are business type
+        for profile in response.data:
+            self.assertEqual(profile['type'], 'business')
+    
+    def test_list_business_profiles_unauthenticated(self):
+        """Test that unauthenticated users cannot list profiles."""
+        url = reverse('business-profiles')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_list_business_profiles_contains_all_fields(self):
+        """Test that each profile contains all required fields."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('business-profiles')
+        
+        response = self.client.get(url)
+        
+        required_fields = [
+            'user', 'username', 'first_name', 'last_name', 'file',
+            'location', 'tel', 'description', 'working_hours', 'type'
+        ]
+        
+        for profile in response.data:
+            for field in required_fields:
+                self.assertIn(field, profile, f"Field '{field}' missing in profile")
+
+
+class CustomerProfileListTests(APITestCase):
+    """Test cases for customer profile list endpoint."""
+    
+    def setUp(self):
+        """Set up test client and test users."""
+        self.client = APIClient()
+        
+        # Create test business user (for authentication)
+        self.business = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_token = Token.objects.create(user=self.business)
+        
+        # Create multiple customer users
+        self.customer1 = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer1.profile.first_name = 'Customer'
+        self.customer1.profile.last_name = 'One'
+        self.customer1.profile.save()
+        
+        self.customer2 = User.objects.create_user(
+            username='customer2',
+            email='customer2@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer2.profile.first_name = 'Customer'
+        self.customer2.profile.last_name = 'Two'
+        self.customer2.profile.save()
+    
+    def test_list_customer_profiles_success(self):
+        """Test listing all customer profiles."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('customer-profiles')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+        self.assertEqual(len(response.data), 2)
+        
+        # Check that all returned profiles are customer type
+        for profile in response.data:
+            self.assertEqual(profile['type'], 'customer')
+    
+    def test_list_customer_profiles_unauthenticated(self):
+        """Test that unauthenticated users cannot list profiles."""
+        url = reverse('customer-profiles')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_list_customer_profiles_contains_all_fields(self):
+        """Test that each profile contains all required fields."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('customer-profiles')
+        
+        response = self.client.get(url)
+        
+        required_fields = [
+            'user', 'username', 'first_name', 'last_name', 'file',
+            'location', 'tel', 'description', 'working_hours', 'type'
+        ]
+        
+        for profile in response.data:
+            for field in required_fields:
+                self.assertIn(field, profile, f"Field '{field}' missing in profile")
+                
+
+
