@@ -166,4 +166,176 @@ class ProfileDetailTests(APITestCase):
         
         for field in required_fields:
             self.assertIn(field, response.data, f"Field '{field}' missing in response")
-            
+
+
+class ProfileUpdateTests(APITestCase):
+    """Test cases for profile update endpoint (PATCH)."""
+    
+    def setUp(self):
+        """Set up test client and test users."""
+        self.client = APIClient()
+        
+        # Create test users
+        self.user1 = User.objects.create_user(
+            username='user1',
+            email='user1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.token1 = Token.objects.create(user=self.user1)
+        
+        self.user2 = User.objects.create_user(
+            username='user2',
+            email='user2@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.token2 = Token.objects.create(user=self.user2)
+    
+    def test_update_own_profile_success(self):
+        """Test successful profile update by owner."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': self.user1.id})
+        
+        data = {
+            'first_name': 'Updated',
+            'last_name': 'Name',
+            'location': 'Munich',
+            'tel': '987654321',
+            'description': 'Updated description',
+            'working_hours': '10-18'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['first_name'], 'Updated')
+        self.assertEqual(response.data['last_name'], 'Name')
+        self.assertEqual(response.data['location'], 'Munich')
+        self.assertEqual(response.data['tel'], '987654321')
+        self.assertEqual(response.data['description'], 'Updated description')
+        self.assertEqual(response.data['working_hours'], '10-18')
+        
+        # Verify database was updated
+        self.user1.profile.refresh_from_db()
+        self.assertEqual(self.user1.profile.first_name, 'Updated')
+    
+    def test_update_profile_partial(self):
+        """Test partial profile update (only some fields)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': self.user1.id})
+        
+        data = {
+            'first_name': 'John',
+            'location': 'Hamburg'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['first_name'], 'John')
+        self.assertEqual(response.data['location'], 'Hamburg')
+    
+    def test_update_email_in_profile(self):
+        """Test updating email through profile endpoint."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': self.user1.id})
+        
+        data = {
+            'email': 'newemail@test.com'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], 'newemail@test.com')
+        
+        # Verify user email was updated
+        self.user1.refresh_from_db()
+        self.assertEqual(self.user1.email, 'newemail@test.com')
+    
+    def test_update_other_user_profile_forbidden(self):
+        """Test that user cannot update another user's profile."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': self.user2.id})
+        
+        data = {
+            'first_name': 'Hacked'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # Verify profile was not updated
+        self.user2.profile.refresh_from_db()
+        self.assertNotEqual(self.user2.profile.first_name, 'Hacked')
+    
+    def test_update_profile_unauthenticated(self):
+        """Test that unauthenticated users cannot update profiles."""
+        url = reverse('profile-detail', kwargs={'pk': self.user1.id})
+        
+        data = {
+            'first_name': 'Hacked'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_update_profile_not_found(self):
+        """Test updating non-existent profile returns 404."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': 99999})
+        
+        data = {
+            'first_name': 'Test'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_update_profile_returns_all_fields(self):
+        """Test that update response contains all profile fields."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': self.user1.id})
+        
+        data = {
+            'first_name': 'Test'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        required_fields = [
+            'user', 'username', 'first_name', 'last_name', 'file',
+            'location', 'tel', 'description', 'working_hours',
+            'type', 'email', 'created_at'
+        ]
+        
+        for field in required_fields:
+            self.assertIn(field, response.data, f"Field '{field}' missing in response")
+    
+    def test_update_profile_empty_fields_return_empty_strings(self):
+        """Test that empty fields in update response are empty strings."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token1.key}')
+        url = reverse('profile-detail', kwargs={'pk': self.user1.id})
+        
+        data = {
+            'first_name': 'John'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        # Check that response has the required fields
+        self.assertIn('last_name', response.data)
+        self.assertIn('location', response.data)
+        self.assertIn('tel', response.data)
+        
+        # Empty fields should be empty strings
+        self.assertEqual(response.data['last_name'], '')
+        self.assertEqual(response.data['location'], '')
+        self.assertEqual(response.data['tel'], '')
+        
+        
+        
