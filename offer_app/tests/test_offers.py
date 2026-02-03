@@ -126,7 +126,7 @@ class OfferListTests(APITestCase):
         response = self.client.get(url)
         
         required_fields = [
-            'id', 'title', 'image', 'description', 'created_at',
+            'id', 'user', 'title', 'image', 'description', 'created_at',
             'updated_at', 'details', 'min_price', 'min_delivery_time',
             'user_details'
         ]
@@ -297,7 +297,7 @@ class OfferListTests(APITestCase):
         # Should return offers from business1 that match search and have price >= 100
     
     def test_details_urls_in_response(self):
-        """Test that details contain URL field."""
+        """Test that details contain id and url fields."""
         url = reverse('offer-list')
         
         response = self.client.get(url)
@@ -306,4 +306,267 @@ class OfferListTests(APITestCase):
         self.assertIsInstance(first_offer['details'], list)
         
         if len(first_offer['details']) > 0:
+            self.assertIn('id', first_offer['details'][0])
             self.assertIn('url', first_offer['details'][0])
+"""Additional tests for offer create endpoint (POST)."""
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase, APIClient
+from django.contrib.auth import get_user_model
+from rest_framework.authtoken.models import Token
+from offer_app.models import Offer, OfferDetail
+from decimal import Decimal
+
+User = get_user_model()
+
+
+class OfferCreateTests(APITestCase):
+    """Test cases for offer create endpoint (POST)."""
+    
+    def setUp(self):
+        """Set up test client and test users."""
+        self.client = APIClient()
+        
+        # Create business user
+        self.business_user = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_user.profile.first_name = 'John'
+        self.business_user.profile.last_name = 'Doe'
+        self.business_user.profile.save()
+        self.business_token = Token.objects.create(user=self.business_user)
+        
+        # Create customer user
+        self.customer_user = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer_token = Token.objects.create(user=self.customer_user)
+        
+        # Valid offer data
+        self.valid_offer_data = {
+            'title': 'Website Design',
+            'description': 'Professional website design services',
+            'details': [
+                {
+                    'title': 'Basic Package',
+                    'revisions': 2,
+                    'delivery_time_in_days': 7,
+                    'price': '100.00',
+                    'features': 'Basic website design',
+                    'offer_type': 'basic'
+                },
+                {
+                    'title': 'Premium Package',
+                    'revisions': 5,
+                    'delivery_time_in_days': 14,
+                    'price': '250.00',
+                    'features': 'Premium website design',
+                    'offer_type': 'premium'
+                }
+            ]
+        }
+    
+    def test_create_offer_success(self):
+        """Test successful offer creation by business user."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        response = self.client.post(url, self.valid_offer_data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('id', response.data)
+        self.assertEqual(response.data['title'], 'Website Design')
+        self.assertEqual(response.data['user'], self.business_user.id)
+        self.assertEqual(len(response.data['details']), 2)
+        
+        # Verify database
+        self.assertEqual(Offer.objects.count(), 1)
+        self.assertEqual(OfferDetail.objects.count(), 2)
+    
+    def test_create_offer_response_structure(self):
+        """Test that response has correct structure."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        response = self.client.post(url, self.valid_offer_data, format='json')
+        
+        required_fields = [
+            'id', 'user', 'title', 'image', 'description',
+            'created_at', 'updated_at', 'details',
+            'min_price', 'min_delivery_time', 'user_details'
+        ]
+        
+        for field in required_fields:
+            self.assertIn(field, response.data, f"Field '{field}' missing")
+        
+        # Check details structure
+        detail = response.data['details'][0]
+        detail_fields = ['id', 'title', 'revisions', 'delivery_time_in_days', 'price', 'features', 'offer_type']
+        for field in detail_fields:
+            self.assertIn(field, detail, f"Detail field '{field}' missing")
+    
+    def test_create_offer_min_values_calculated(self):
+        """Test that min_price and min_delivery_time are calculated."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        response = self.client.post(url, self.valid_offer_data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(float(response.data['min_price']), 100.00)
+        self.assertEqual(response.data['min_delivery_time'], 7)
+    
+    def test_create_offer_user_details_included(self):
+        """Test that user_details are included in response."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        response = self.client.post(url, self.valid_offer_data, format='json')
+        
+        self.assertIn('user_details', response.data)
+        self.assertEqual(response.data['user_details']['username'], 'business1')
+        self.assertEqual(response.data['user_details']['first_name'], 'John')
+    
+    def test_create_offer_unauthenticated(self):
+        """Test that unauthenticated users cannot create offers."""
+        url = reverse('offer-list')
+        
+        response = self.client.post(url, self.valid_offer_data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_create_offer_customer_forbidden(self):
+        """Test that customer users cannot create offers."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('offer-list')
+        
+        response = self.client.post(url, self.valid_offer_data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('detail', response.data)
+    
+    def test_create_offer_missing_title(self):
+        """Test validation error when title is missing."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        del data['title']
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('title', response.data)
+    
+    def test_create_offer_missing_description(self):
+        """Test validation error when description is missing."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        del data['description']
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('description', response.data)
+    
+    def test_create_offer_missing_details(self):
+        """Test validation error when details are missing."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        del data['details']
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('details', response.data)
+    
+    def test_create_offer_empty_details(self):
+        """Test validation error when details array is empty."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        data['details'] = []
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('details', response.data)
+    
+    def test_create_offer_single_detail(self):
+        """Test creating offer with single detail."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = {
+            'title': 'Logo Design',
+            'description': 'Professional logo design',
+            'details': [
+                {
+                    'title': 'Standard Package',
+                    'revisions': 3,
+                    'delivery_time_in_days': 5,
+                    'price': '150.00',
+                    'features': 'Logo design',
+                    'offer_type': 'standard'
+                }
+            ]
+        }
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data['details']), 1)
+    
+    def test_create_offer_invalid_price(self):
+        """Test validation error for invalid price."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        data['details'][0]['price'] = 'invalid'
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_create_offer_negative_price(self):
+        """Test validation error for negative price."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        data['details'][0]['price'] = '-50.00'
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_create_offer_with_image(self):
+        """Test creating offer without image (image is optional)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-list')
+        
+        data = self.valid_offer_data.copy()
+        # Image is optional, so we just test without it
+        
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        # Image should be null since we didn't provide one
+        self.assertIsNone(response.data['image'])
+
+
+
+
+
