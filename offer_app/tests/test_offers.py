@@ -9,7 +9,6 @@ from decimal import Decimal
 
 User = get_user_model()
 
-
 class OfferListTests(APITestCase):
     """Test cases for offer list endpoint."""
     
@@ -17,7 +16,6 @@ class OfferListTests(APITestCase):
         """Set up test client and test data."""
         self.client = APIClient()
         
-        # Create test users
         self.business1 = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -45,7 +43,6 @@ class OfferListTests(APITestCase):
             type='customer'
         )
         
-        # Create offers
         self.offer1 = Offer.objects.create(
             user=self.business1,
             title='Website Design',
@@ -64,7 +61,6 @@ class OfferListTests(APITestCase):
             description='iOS and Android app development'
         )
         
-        # Create offer details for offer1
         OfferDetail.objects.create(
             offer=self.offer1,
             title='Basic Package',
@@ -85,7 +81,6 @@ class OfferListTests(APITestCase):
             offer_type='premium'
         )
         
-        # Create offer details for offer2
         OfferDetail.objects.create(
             offer=self.offer2,
             title='Standard Package',
@@ -96,7 +91,6 @@ class OfferListTests(APITestCase):
             offer_type='standard'
         )
         
-        # Create offer details for offer3
         OfferDetail.objects.create(
             offer=self.offer3,
             title='Basic App',
@@ -155,10 +149,8 @@ class OfferListTests(APITestCase):
         
         response = self.client.get(url)
         
-        # Find offer1 in results
         offer1_data = next(o for o in response.data['results'] if o['id'] == self.offer1.id)
         
-        # Should be 100.00 (minimum of 100 and 250)
         self.assertEqual(float(offer1_data['min_price']), 100.00)
     
     def test_list_offers_min_delivery_time_calculation(self):
@@ -167,10 +159,8 @@ class OfferListTests(APITestCase):
         
         response = self.client.get(url)
         
-        # Find offer1 in results
         offer1_data = next(o for o in response.data['results'] if o['id'] == self.offer1.id)
         
-        # Should be 7 (minimum of 7 and 14)
         self.assertEqual(offer1_data['min_delivery_time'], 7)
     
     def test_filter_by_creator_id(self):
@@ -180,7 +170,7 @@ class OfferListTests(APITestCase):
         response = self.client.get(url, {'creator_id': self.business1.id})
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['count'], 2)  # business1 has 2 offers
+        self.assertEqual(response.data['count'], 2)
         
         for offer in response.data['results']:
             self.assertEqual(offer['user_details']['id'], self.business1.id)
@@ -192,7 +182,6 @@ class OfferListTests(APITestCase):
         response = self.client.get(url, {'min_price': 200})
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should return offer1 (has detail with 250) and offer3 (has 2000)
         self.assertGreaterEqual(response.data['count'], 2)
     
     def test_filter_by_max_delivery_time(self):
@@ -202,8 +191,6 @@ class OfferListTests(APITestCase):
         response = self.client.get(url, {'max_delivery_time': 10})
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should return offers with details that have delivery_time <= 10
-        # offer1 has 7, offer2 has 5
         self.assertGreaterEqual(response.data['count'], 2)
     
     def test_search_by_title(self):
@@ -215,7 +202,6 @@ class OfferListTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(response.data['count'], 1)
         
-        # Check that result contains the search term
         self.assertIn('Website', response.data['results'][0]['title'])
     
     def test_search_by_description(self):
@@ -235,7 +221,6 @@ class OfferListTests(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Check that results are ordered (oldest first)
         results = response.data['results']
         if len(results) > 1:
             self.assertLessEqual(results[0]['updated_at'], results[1]['updated_at'])
@@ -248,7 +233,6 @@ class OfferListTests(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Check that results are ordered (newest first)
         results = response.data['results']
         if len(results) > 1:
             self.assertGreaterEqual(results[0]['updated_at'], results[1]['updated_at'])
@@ -267,16 +251,13 @@ class OfferListTests(APITestCase):
         """Test getting next page of results."""
         url = reverse('offer-list')
         
-        # Get first page
         response1 = self.client.get(url, {'page_size': 2, 'page': 1})
         
-        # Get second page
         response2 = self.client.get(url, {'page_size': 2, 'page': 2})
         
         self.assertEqual(response1.status_code, status.HTTP_200_OK)
         self.assertEqual(response2.status_code, status.HTTP_200_OK)
         
-        # Results should be different
         if len(response2.data['results']) > 0:
             self.assertNotEqual(
                 response1.data['results'][0]['id'],
@@ -294,7 +275,6 @@ class OfferListTests(APITestCase):
         })
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should return offers from business1 that match search and have price >= 100
     
     def test_details_urls_in_response(self):
         """Test that details contain id and url fields."""
@@ -308,17 +288,8 @@ class OfferListTests(APITestCase):
         if len(first_offer['details']) > 0:
             self.assertIn('id', first_offer['details'][0])
             self.assertIn('url', first_offer['details'][0])
-"""Additional tests for offer create endpoint (POST)."""
-from django.urls import reverse
-from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
-from django.contrib.auth import get_user_model
-from rest_framework.authtoken.models import Token
-from offer_app.models import Offer, OfferDetail
-from decimal import Decimal
 
 User = get_user_model()
-
 
 class OfferCreateTests(APITestCase):
     """Test cases for offer create endpoint (POST)."""
@@ -327,7 +298,6 @@ class OfferCreateTests(APITestCase):
         """Set up test client and test users."""
         self.client = APIClient()
         
-        # Create business user
         self.business_user = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -339,7 +309,6 @@ class OfferCreateTests(APITestCase):
         self.business_user.profile.save()
         self.business_token = Token.objects.create(user=self.business_user)
         
-        # Create customer user
         self.customer_user = User.objects.create_user(
             username='customer1',
             email='customer1@test.com',
@@ -348,7 +317,6 @@ class OfferCreateTests(APITestCase):
         )
         self.customer_token = Token.objects.create(user=self.customer_user)
         
-        # Valid offer data
         self.valid_offer_data = {
             'title': 'Website Design',
             'description': 'Professional website design services',
@@ -385,7 +353,6 @@ class OfferCreateTests(APITestCase):
         self.assertEqual(response.data['user'], self.business_user.id)
         self.assertEqual(len(response.data['details']), 2)
         
-        # Verify database
         self.assertEqual(Offer.objects.count(), 1)
         self.assertEqual(OfferDetail.objects.count(), 2)
     
@@ -405,7 +372,6 @@ class OfferCreateTests(APITestCase):
         for field in required_fields:
             self.assertIn(field, response.data, f"Field '{field}' missing")
         
-        # Check details structure
         detail = response.data['details'][0]
         detail_fields = ['id', 'title', 'revisions', 'delivery_time_in_days', 'price', 'features', 'offer_type']
         for field in detail_fields:
@@ -558,15 +524,170 @@ class OfferCreateTests(APITestCase):
         url = reverse('offer-list')
         
         data = self.valid_offer_data.copy()
-        # Image is optional, so we just test without it
         
         response = self.client.post(url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        # Image should be null since we didn't provide one
         self.assertIsNone(response.data['image'])
 
 
+User = get_user_model()
 
 
-
+class OfferDetailViewTests(APITestCase):
+    """Test cases for single offer detail endpoint."""
+    
+    def setUp(self):
+        """Set up test client and test data."""
+        self.client = APIClient()
+        
+        self.business_user = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_user.profile.first_name = 'John'
+        self.business_user.profile.last_name = 'Doe'
+        self.business_user.profile.save()
+        self.business_token = Token.objects.create(user=self.business_user)
+        
+        self.customer_user = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer_token = Token.objects.create(user=self.customer_user)
+        
+        self.offer = Offer.objects.create(
+            user=self.business_user,
+            title='Grafikdesign-Paket',
+            description='Ein umfassendes Grafikdesign-Paket für Unternehmen'
+        )
+        
+        self.detail1 = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Basic Package',
+            revisions=2,
+            delivery_time_in_days=5,
+            price=Decimal('50.00'),
+            features='Basic design',
+            offer_type='basic'
+        )
+        
+        self.detail2 = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Premium Package',
+            revisions=5,
+            delivery_time_in_days=10,
+            price=Decimal('200.00'),
+            features='Premium design',
+            offer_type='premium'
+        )
+        
+        self.detail3 = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Enterprise Package',
+            revisions=10,
+            delivery_time_in_days=15,
+            price=Decimal('201.00'),
+            features='Enterprise design',
+            offer_type='enterprise'
+        )
+    
+    def test_get_offer_detail_success(self):
+        """Test successfully retrieving a single offer."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['id'], self.offer.id)
+        self.assertEqual(response.data['title'], 'Grafikdesign-Paket')
+        self.assertEqual(response.data['user'], self.business_user.id)
+    
+    def test_get_offer_detail_has_all_fields(self):
+        """Test that response contains all required fields."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        required_fields = [
+            'id', 'user', 'title', 'image', 'description',
+            'created_at', 'updated_at', 'details',
+            'min_price', 'min_delivery_time'
+        ]
+        
+        for field in required_fields:
+            self.assertIn(field, response.data, f"Field '{field}' missing")
+    
+    def test_get_offer_detail_has_details_array(self):
+        """Test that details array contains id and url."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        self.assertIsInstance(response.data['details'], list)
+        self.assertEqual(len(response.data['details']), 3)
+        
+        for detail in response.data['details']:
+            self.assertIn('id', detail)
+            self.assertIn('url', detail)
+    
+    def test_get_offer_detail_min_values(self):
+        """Test that min_price and min_delivery_time are calculated correctly."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(float(response.data['min_price']), 50.00)
+        self.assertEqual(response.data['min_delivery_time'], 5)
+    
+    def test_get_offer_detail_unauthenticated(self):
+        """Test that unauthenticated users cannot access offer details."""
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_get_offer_detail_not_found(self):
+        """Test 404 response for non-existent offer."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': 99999})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_get_offer_detail_customer_can_view(self):
+        """Test that customer users can view offer details."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['id'], self.offer.id)
+    
+    def test_get_offer_detail_another_business_can_view(self):
+        """Test that other business users can view offers."""
+        other_business = User.objects.create_user(
+            username='business2',
+            email='business2@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        other_token = Token.objects.create(user=other_business)
+        
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {other_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)

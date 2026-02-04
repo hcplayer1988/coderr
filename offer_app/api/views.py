@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Min, Q
+from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from offer_app.models import Offer, OfferDetail
 from .serializers import OfferListSerializer, OfferCreateSerializer
@@ -31,8 +32,10 @@ class OfferListCreateView(generics.ListCreateAPIView):
     pagination_class = OfferPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
+    # Search configuration
     search_fields = ['title', 'description']
     
+    # Ordering configuration
     ordering_fields = ['updated_at', 'created_at']
     ordering = ['-created_at']
     
@@ -55,10 +58,12 @@ class OfferListCreateView(generics.ListCreateAPIView):
         """Get queryset with filtering applied."""
         queryset = Offer.objects.select_related('user').prefetch_related('details').all()
         
+        # Filter by creator_id
         creator_id = self.request.query_params.get('creator_id', None)
         if creator_id:
             queryset = queryset.filter(user_id=creator_id)
         
+        # Filter by min_price
         min_price = self.request.query_params.get('min_price', None)
         if min_price:
             try:
@@ -67,6 +72,7 @@ class OfferListCreateView(generics.ListCreateAPIView):
             except (ValueError, TypeError):
                 pass
         
+        # Filter by max_delivery_time
         max_delivery_time = self.request.query_params.get('max_delivery_time', None)
         if max_delivery_time:
             try:
@@ -75,6 +81,7 @@ class OfferListCreateView(generics.ListCreateAPIView):
             except (ValueError, TypeError):
                 pass
         
+        # Handle custom ordering by min_price
         ordering = self.request.query_params.get('ordering', None)
         if ordering:
             if 'min_price' in ordering:
@@ -127,6 +134,7 @@ class OfferListCreateView(generics.ListCreateAPIView):
             500: Internal server error
         """
         try:
+            # Check if user is business type
             if request.user.type != 'business':
                 return Response(
                     {'detail': 'Only business users can create offers.'},
@@ -146,5 +154,46 @@ class OfferListCreateView(generics.ListCreateAPIView):
                 {'error': 'Internal server error', 'detail': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class OfferDetailView(generics.RetrieveAPIView):
+    """
+    API endpoint to retrieve a single offer by ID.
+    
+    GET /api/offers/{id}/
+    """
+    
+    serializer_class = OfferListSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Offer.objects.select_related('user').prefetch_related('details').all()
+    lookup_field = 'id'
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a single offer by ID.
+        
+        Returns:
+            200: Offer details
+            401: User not authenticated
+            404: Offer not found
+            500: Internal server error
+        """
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Http404:
+            return Response(
+                {'detail': 'Offer not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 
