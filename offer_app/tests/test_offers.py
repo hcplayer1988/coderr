@@ -289,7 +289,6 @@ class OfferListTests(APITestCase):
             self.assertIn('id', first_offer['details'][0])
             self.assertIn('url', first_offer['details'][0])
 
-User = get_user_model()
 
 class OfferCreateTests(APITestCase):
     """Test cases for offer create endpoint (POST)."""
@@ -531,9 +530,6 @@ class OfferCreateTests(APITestCase):
         self.assertIsNone(response.data['image'])
 
 
-User = get_user_model()
-
-
 class OfferDetailViewTests(APITestCase):
     """Test cases for single offer detail endpoint."""
     
@@ -691,3 +687,404 @@ class OfferDetailViewTests(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class OfferUpdateTests(APITestCase):
+    """Test cases for offer update endpoint (PATCH)."""
+    
+    def setUp(self):
+        """Set up test client and test data."""
+        self.client = APIClient()
+        
+        # Business user (owner)
+        self.business_user = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_user.profile.first_name = 'John'
+        self.business_user.profile.last_name = 'Doe'
+        self.business_user.profile.save()
+        self.business_token = Token.objects.create(user=self.business_user)
+        
+        # Another business user (not owner)
+        self.other_business = User.objects.create_user(
+            username='business2',
+            email='business2@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.other_business_token = Token.objects.create(user=self.other_business)
+        
+        # Customer user
+        self.customer_user = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer_token = Token.objects.create(user=self.customer_user)
+        
+        # Create offer with details
+        self.offer = Offer.objects.create(
+            user=self.business_user,
+            title='Grafikdesign-Paket',
+            description='Ein umfassendes Grafikdesign-Paket für Unternehmen'
+        )
+        
+        self.detail1 = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Basic Design',
+            revisions=3,
+            delivery_time_in_days=6,
+            price=Decimal('120.00'),
+            features='Logo Design, Flyer',
+            offer_type='basic'
+        )
+        
+        self.detail2 = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Standard Design',
+            revisions=5,
+            delivery_time_in_days=10,
+            price=Decimal('120.00'),
+            features='Logo Design, Visitenkarte, Briefpapier',
+            offer_type='standard'
+        )
+        
+        self.detail3 = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Premium Design',
+            revisions=10,
+            delivery_time_in_days=10,
+            price=Decimal('150.00'),
+            features='Logo Design, Visitenkarte, Briefpapier, Flyer',
+            offer_type='premium'
+        )
+    
+    def test_update_offer_title_success(self):
+        """Test successfully updating only offer title."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'title': 'Updated Grafikdesign-Paket'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], 'Updated Grafikdesign-Paket')
+        self.assertEqual(response.data['description'], self.offer.description)
+        
+        # Verify in database
+        self.offer.refresh_from_db()
+        self.assertEqual(self.offer.title, 'Updated Grafikdesign-Paket')
+    
+    def test_update_offer_description_success(self):
+        """Test successfully updating only offer description."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'description': 'Updated description'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['description'], 'Updated description')
+        self.assertEqual(response.data['title'], self.offer.title)
+    
+    def test_update_offer_title_and_description(self):
+        """Test updating both title and description."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'title': 'New Title',
+            'description': 'New Description'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], 'New Title')
+        self.assertEqual(response.data['description'], 'New Description')
+    
+    def test_update_single_detail_field(self):
+        """Test updating a single field in one detail."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'title': 'Updated Grafikdesign-Paket',
+            'details': [
+                {
+                    'id': self.detail1.id,
+                    'title': 'Basic Design Updated',
+                    'revisions': 3,
+                    'delivery_time_in_days': 6,
+                    'price': '120.00',
+                    'features': 'Logo Design, Flyer',
+                    'offer_type': 'basic'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], 'Updated Grafikdesign-Paket')
+        
+        # Find updated detail
+        updated_detail = next(d for d in response.data['details'] if d['id'] == self.detail1.id)
+        self.assertEqual(updated_detail['title'], 'Basic Design Updated')
+        
+        # Verify other details unchanged
+        self.assertEqual(len(response.data['details']), 3)
+    
+    def test_update_multiple_details(self):
+        """Test updating multiple details at once."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'details': [
+                {
+                    'id': self.detail1.id,
+                    'title': 'Basic Design Updated',
+                    'revisions': 5,
+                    'delivery_time_in_days': 8,
+                    'price': '150.00',
+                    'features': 'Logo Design, Flyer, Poster',
+                    'offer_type': 'basic'
+                },
+                {
+                    'id': self.detail2.id,
+                    'title': 'Standard Design Updated',
+                    'revisions': 7,
+                    'delivery_time_in_days': 12,
+                    'price': '200.00',
+                    'features': 'Logo Design, Visitenkarte, Briefpapier, Flyer',
+                    'offer_type': 'standard'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Find updated details
+        detail1 = next(d for d in response.data['details'] if d['id'] == self.detail1.id)
+        detail2 = next(d for d in response.data['details'] if d['id'] == self.detail2.id)
+        
+        self.assertEqual(detail1['title'], 'Basic Design Updated')
+        self.assertEqual(detail1['revisions'], 5)
+        self.assertEqual(detail2['title'], 'Standard Design Updated')
+        self.assertEqual(detail2['revisions'], 7)
+    
+    def test_update_offer_response_structure(self):
+        """Test that response has correct structure."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {'title': 'Updated Title'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        required_fields = [
+            'id', 'user', 'title', 'image', 'description',
+            'created_at', 'updated_at', 'details',
+            'min_price', 'min_delivery_time', 'user_details'
+        ]
+        
+        for field in required_fields:
+            self.assertIn(field, response.data, f"Field '{field}' missing")
+    
+    def test_update_offer_min_values_recalculated(self):
+        """Test that min_price and min_delivery_time are recalculated after update."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'details': [
+                {
+                    'id': self.detail1.id,
+                    'title': 'Basic Design',
+                    'revisions': 3,
+                    'delivery_time_in_days': 3,
+                    'price': '50.00',
+                    'features': 'Logo Design',
+                    'offer_type': 'basic'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(float(response.data['min_price']), 50.00)
+        self.assertEqual(response.data['min_delivery_time'], 3)
+    
+    def test_update_offer_unauthenticated(self):
+        """Test that unauthenticated users cannot update offers."""
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {'title': 'Updated Title'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_update_offer_not_owner_forbidden(self):
+        """Test that non-owners cannot update offers."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.other_business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {'title': 'Updated Title'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_update_offer_customer_forbidden(self):
+        """Test that customer users cannot update offers."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {'title': 'Updated Title'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_update_offer_not_found(self):
+        """Test 404 response for non-existent offer."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': 99999})
+        
+        data = {'title': 'Updated Title'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_update_detail_with_invalid_id(self):
+        """Test error when trying to update detail with non-existent id."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'details': [
+                {
+                    'id': 99999,
+                    'title': 'Invalid Detail',
+                    'revisions': 3,
+                    'delivery_time_in_days': 5,
+                    'price': '100.00',
+                    'features': 'Test',
+                    'offer_type': 'basic'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('details', response.data)
+    
+    def test_update_offer_empty_title(self):
+        """Test validation error for empty title."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {'title': ''}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_update_detail_negative_price(self):
+        """Test validation error for negative price in detail."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'details': [
+                {
+                    'id': self.detail1.id,
+                    'title': 'Basic Design',
+                    'revisions': 3,
+                    'delivery_time_in_days': 6,
+                    'price': '-50.00',
+                    'features': 'Logo Design',
+                    'offer_type': 'basic'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_update_detail_zero_delivery_time(self):
+        """Test validation error for zero delivery time."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'details': [
+                {
+                    'id': self.detail1.id,
+                    'title': 'Basic Design',
+                    'revisions': 3,
+                    'delivery_time_in_days': 0,
+                    'price': '100.00',
+                    'features': 'Logo Design',
+                    'offer_type': 'basic'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_update_offer_user_field_ignored(self):
+        """Test that user field cannot be changed."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'title': 'Updated Title',
+            'user': self.other_business.id
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user'], self.business_user.id)
+        
+        # Verify in database
+        self.offer.refresh_from_db()
+        self.assertEqual(self.offer.user.id, self.business_user.id)
+    
+    def test_update_offer_details_unchanged_when_not_provided(self):
+        """Test that details remain unchanged when not provided in update."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        # Get initial details count
+        initial_details_count = OfferDetail.objects.filter(offer=self.offer).count()
+        
+        data = {'title': 'Updated Title Only'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['details']), initial_details_count)
+        self.assertEqual(OfferDetail.objects.filter(offer=self.offer).count(), initial_details_count)
+        

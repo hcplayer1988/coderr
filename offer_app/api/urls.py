@@ -1,8 +1,8 @@
 """URL configuration for offer API endpoints."""
 from django.urls import path
-from .views import OfferListCreateView, OfferDetailView
+from .views import OfferListCreateView, OfferDetailUpdateView
 
 urlpatterns = [
     path('offers/', OfferListCreateView.as_view(), name='offer-list'),
-    path('offers/<int:id>/', OfferDetailView.as_view(), name='offer-detail'),
+    path('offers/<int:id>/', OfferDetailUpdateView.as_view(), name='offer-detail'),
 ]

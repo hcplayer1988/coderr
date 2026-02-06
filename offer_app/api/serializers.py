@@ -58,6 +58,79 @@ class OfferDetailSerializer(serializers.ModelSerializer):
         return value
 
 
+class OfferDetailResponseSerializer(serializers.ModelSerializer):
+    """
+    Serializer for OfferDetail in PATCH responses.
+    Returns features as array and price as integer per specification.
+    """
+    
+    features = serializers.SerializerMethodField()
+    price = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OfferDetail
+        fields = [
+            'id',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type'
+        ]
+    
+    def get_features(self, obj):
+        """Convert features string to array."""
+        if obj.features:
+            # Split by comma and strip whitespace
+            return [f.strip() for f in obj.features.split(',') if f.strip()]
+        return []
+    
+    def get_price(self, obj):
+        """Return price as integer."""
+        return int(obj.price)
+
+
+class OfferDetailUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for updating OfferDetail objects.
+    Uses explicit field definitions to ensure id is properly handled.
+    Accepts features as either string or array.
+    """
+    
+    id = serializers.IntegerField(required=False, allow_null=True)
+    title = serializers.CharField(max_length=200, required=False)
+    revisions = serializers.IntegerField(required=False)
+    delivery_time_in_days = serializers.IntegerField(required=False)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    features = serializers.JSONField(required=False)  # Accept both string and array
+    offer_type = serializers.CharField(max_length=50, required=False)
+    
+    def validate_price(self, value):
+        """Validate that price is not negative."""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Price cannot be negative.")
+        return value
+    
+    def validate_delivery_time_in_days(self, value):
+        """Validate that delivery time is positive."""
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Delivery time must be positive.")
+        return value
+    
+    def validate_revisions(self, value):
+        """Validate that revisions is not negative."""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Revisions cannot be negative.")
+        return value
+    
+    def validate_features(self, value):
+        """Convert features array to comma-separated string for storage."""
+        if isinstance(value, list):
+            return ', '.join(value)
+        return value
+
+
 class OfferListSerializer(serializers.ModelSerializer):
     """
     Serializer for offer list view.
@@ -120,7 +193,6 @@ class OfferListSerializer(serializers.ModelSerializer):
         """Override to handle image field."""
         representation = super().to_representation(instance)
         
-        # Handle image field
         if representation.get('image'):
             representation['image'] = instance.image.name if instance.image else None
         else:
@@ -137,7 +209,6 @@ class OfferCreateSerializer(serializers.ModelSerializer):
     
     details = OfferDetailSerializer(many=True, write_only=True)
     
-    # Read-only fields for response
     user = serializers.IntegerField(source='user.id', read_only=True)
     user_details = UserDetailSerializer(source='user', read_only=True)
     min_price = serializers.SerializerMethodField()
@@ -170,10 +241,8 @@ class OfferCreateSerializer(serializers.ModelSerializer):
         """Create offer with nested details."""
         details_data = validated_data.pop('details')
         
-        # Create the offer
         offer = Offer.objects.create(**validated_data)
         
-        # Create offer details
         for detail_data in details_data:
             OfferDetail.objects.create(offer=offer, **detail_data)
         
@@ -197,17 +266,102 @@ class OfferCreateSerializer(serializers.ModelSerializer):
         """Return full offer data with complete details in response."""
         representation = super().to_representation(instance)
         
-        # Replace details with full OfferDetail serializer
         details_queryset = instance.details.all()
         representation['details'] = OfferDetailSerializer(details_queryset, many=True).data
         
-        # Handle image field
         if representation.get('image'):
             representation['image'] = instance.image.name if instance.image else None
         else:
             representation['image'] = None
         
         return representation
+
+
+class OfferUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating offers via PATCH.
+    Accepts partial updates for offer and nested details.
     
+    Response format matches specification exactly:
+    - Only returns: id, title, image, description, details
+    - features is returned as array
+    - price is returned as integer
+    """
     
+    details = OfferDetailUpdateSerializer(many=True, required=False)
+    
+    class Meta:
+        model = Offer
+        fields = [
+            'id',
+            'title',
+            'image',
+            'description',
+            'details',
+        ]
+        read_only_fields = ['id']
+    
+    def update(self, instance, validated_data):
+        """
+        Update offer and nested details.
+        Only updates fields that are provided in the request.
+        """
+        # Extract details_data from validated_data
+        details_data = validated_data.pop('details', None)
+        
+        # Update offer fields (title, description, image)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update details if provided
+        if details_data is not None:
+            for detail_data in details_data:
+                detail_id = detail_data.get('id')
+                
+                if detail_id:
+                    # Update existing detail
+                    try:
+                        detail = OfferDetail.objects.get(id=detail_id, offer=instance)
+                        
+                        # Update only provided fields
+                        for attr, value in detail_data.items():
+                            if attr != 'id':  # Skip id field
+                                setattr(detail, attr, value)
+                        detail.save()
+                        
+                    except OfferDetail.DoesNotExist:
+                        raise serializers.ValidationError({
+                            'details': f"OfferDetail with id {detail_id} does not exist for this offer."
+                        })
+                else:
+                    # Create new detail if no id provided
+                    OfferDetail.objects.create(offer=instance, **detail_data)
+        
+        # CRITICAL: Refresh instance to get updated related objects
+        instance.refresh_from_db()
+        
+        return instance
+    
+    def to_representation(self, instance):
+        """
+        Return response matching specification exactly.
+        Only: id, title, image, description, details
+        With features as array and price as integer.
+        """
+        # Refresh to ensure we have the latest data
+        instance.refresh_from_db()
+        
+        # Get fresh details from DB
+        details_queryset = OfferDetail.objects.filter(offer=instance)
+        
+        return {
+            'id': instance.id,
+            'title': instance.title,
+            'image': instance.image.name if instance.image else None,
+            'description': instance.description,
+            'details': OfferDetailResponseSerializer(details_queryset, many=True).data
+        }
+    
+
     

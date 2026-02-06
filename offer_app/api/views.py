@@ -1,13 +1,15 @@
 """Views for offer API endpoints."""
-from rest_framework import generics, status, filters
+from rest_framework import generics, status, filters, serializers
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.exceptions import PermissionDenied
 from django.db.models import Min, Q
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from offer_app.models import Offer, OfferDetail
-from .serializers import OfferListSerializer, OfferCreateSerializer
+from .serializers import OfferListSerializer, OfferCreateSerializer, OfferUpdateSerializer
+from .permissions import IsOfferOwner
 
 
 class OfferPagination(PageNumberPagination):
@@ -32,10 +34,8 @@ class OfferListCreateView(generics.ListCreateAPIView):
     pagination_class = OfferPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
-    # Search configuration
     search_fields = ['title', 'description']
     
-    # Ordering configuration
     ordering_fields = ['updated_at', 'created_at']
     ordering = ['-created_at']
     
@@ -58,12 +58,10 @@ class OfferListCreateView(generics.ListCreateAPIView):
         """Get queryset with filtering applied."""
         queryset = Offer.objects.select_related('user').prefetch_related('details').all()
         
-        # Filter by creator_id
         creator_id = self.request.query_params.get('creator_id', None)
         if creator_id:
             queryset = queryset.filter(user_id=creator_id)
         
-        # Filter by min_price
         min_price = self.request.query_params.get('min_price', None)
         if min_price:
             try:
@@ -72,7 +70,6 @@ class OfferListCreateView(generics.ListCreateAPIView):
             except (ValueError, TypeError):
                 pass
         
-        # Filter by max_delivery_time
         max_delivery_time = self.request.query_params.get('max_delivery_time', None)
         if max_delivery_time:
             try:
@@ -81,7 +78,6 @@ class OfferListCreateView(generics.ListCreateAPIView):
             except (ValueError, TypeError):
                 pass
         
-        # Handle custom ordering by min_price
         ordering = self.request.query_params.get('ordering', None)
         if ordering:
             if 'min_price' in ordering:
@@ -134,7 +130,6 @@ class OfferListCreateView(generics.ListCreateAPIView):
             500: Internal server error
         """
         try:
-            # Check if user is business type
             if request.user.type != 'business':
                 return Response(
                     {'detail': 'Only business users can create offers.'},
@@ -156,17 +151,31 @@ class OfferListCreateView(generics.ListCreateAPIView):
             )
 
 
-class OfferDetailView(generics.RetrieveAPIView):
+class OfferDetailUpdateView(generics.RetrieveUpdateAPIView):
     """
-    API endpoint to retrieve a single offer by ID.
+    API endpoint to retrieve and update a single offer.
     
-    GET /api/offers/{id}/
+    GET /api/offers/{id}/ - Retrieve offer (authenticated users)
+    PATCH /api/offers/{id}/ - Update offer (owner only)
     """
     
-    serializer_class = OfferListSerializer
-    permission_classes = [IsAuthenticated]
     queryset = Offer.objects.select_related('user').prefetch_related('details').all()
     lookup_field = 'id'
+    
+    def get_permissions(self):
+        """
+        GET requests need authentication.
+        PATCH requests need authentication + ownership.
+        """
+        if self.request.method == 'PATCH':
+            return [IsAuthenticated(), IsOfferOwner()]
+        return [IsAuthenticated()]
+    
+    def get_serializer_class(self):
+        """Use different serializers for GET and PATCH."""
+        if self.request.method == 'PATCH':
+            return OfferUpdateSerializer
+        return OfferListSerializer
     
     def retrieve(self, request, *args, **kwargs):
         """
@@ -182,6 +191,52 @@ class OfferDetailView(generics.RetrieveAPIView):
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Http404:
+            return Response(
+                {'detail': 'Offer not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Update an existing offer (partial update).
+        
+        Returns:
+            200: Offer successfully updated
+            400: Validation errors or invalid detail IDs
+            401: User not authenticated
+            403: User is not the owner
+            404: Offer not found
+            500: Internal server error
+        """
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except serializers.ValidationError as e:
+            # Handle validation errors from serializer.update() method
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        
+        except PermissionDenied:
+            return Response(
+                {'detail': 'You do not have permission to perform this action.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         except Http404:
             return Response(
