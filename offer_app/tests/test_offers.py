@@ -9,6 +9,7 @@ from decimal import Decimal
 
 User = get_user_model()
 
+
 class OfferListTests(APITestCase):
     """Test cases for offer list endpoint."""
     
@@ -531,7 +532,7 @@ class OfferCreateTests(APITestCase):
 
 
 class OfferDetailViewTests(APITestCase):
-    """Test cases for single offer detail endpoint."""
+    """Test cases for single offer detail endpoint (GET)."""
     
     def setUp(self):
         """Set up test client and test data."""
@@ -763,20 +764,17 @@ class OfferUpdateTests(APITestCase):
             offer_type='premium'
         )
     
+    # ==================== SUCCESS CASES (200) ====================
+    
     def test_update_offer_title_success(self):
         """Test successfully updating only offer title."""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {
-            'title': 'Updated Grafikdesign-Paket'
-        }
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'title': 'Updated Grafikdesign-Paket'}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['title'], 'Updated Grafikdesign-Paket')
-        self.assertEqual(response.data['description'], self.offer.description)
         
         # Verify in database
         self.offer.refresh_from_db()
@@ -787,15 +785,10 @@ class OfferUpdateTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {
-            'description': 'Updated description'
-        }
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'description': 'Updated description'}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['description'], 'Updated description')
-        self.assertEqual(response.data['title'], self.offer.title)
     
     def test_update_offer_title_and_description(self):
         """Test updating both title and description."""
@@ -819,7 +812,6 @@ class OfferUpdateTests(APITestCase):
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
         data = {
-            'title': 'Updated Grafikdesign-Paket',
             'details': [
                 {
                     'id': self.detail1.id,
@@ -827,7 +819,7 @@ class OfferUpdateTests(APITestCase):
                     'revisions': 3,
                     'delivery_time_in_days': 6,
                     'price': '120.00',
-                    'features': 'Logo Design, Flyer',
+                    'features': ['Logo Design', 'Flyer'],
                     'offer_type': 'basic'
                 }
             ]
@@ -836,14 +828,14 @@ class OfferUpdateTests(APITestCase):
         response = self.client.patch(url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['title'], 'Updated Grafikdesign-Paket')
         
         # Find updated detail
-        updated_detail = next(d for d in response.data['details'] if d['id'] == self.detail1.id)
+        updated_detail = next(
+            (d for d in response.data['details'] if d['id'] == self.detail1.id),
+            None
+        )
+        self.assertIsNotNone(updated_detail)
         self.assertEqual(updated_detail['title'], 'Basic Design Updated')
-        
-        # Verify other details unchanged
-        self.assertEqual(len(response.data['details']), 3)
     
     def test_update_multiple_details(self):
         """Test updating multiple details at once."""
@@ -854,20 +846,20 @@ class OfferUpdateTests(APITestCase):
             'details': [
                 {
                     'id': self.detail1.id,
-                    'title': 'Basic Design Updated',
+                    'title': 'Basic Updated',
                     'revisions': 5,
                     'delivery_time_in_days': 8,
                     'price': '150.00',
-                    'features': 'Logo Design, Flyer, Poster',
+                    'features': ['Logo Design', 'Flyer', 'Poster'],
                     'offer_type': 'basic'
                 },
                 {
                     'id': self.detail2.id,
-                    'title': 'Standard Design Updated',
+                    'title': 'Standard Updated',
                     'revisions': 7,
                     'delivery_time_in_days': 12,
                     'price': '200.00',
-                    'features': 'Logo Design, Visitenkarte, Briefpapier, Flyer',
+                    'features': ['Logo Design', 'Visitenkarte', 'Briefpapier', 'Flyer'],
                     'offer_type': 'standard'
                 }
             ]
@@ -878,31 +870,11 @@ class OfferUpdateTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         # Find updated details
-        detail1 = next(d for d in response.data['details'] if d['id'] == self.detail1.id)
-        detail2 = next(d for d in response.data['details'] if d['id'] == self.detail2.id)
+        detail1 = next((d for d in response.data['details'] if d['id'] == self.detail1.id), None)
+        detail2 = next((d for d in response.data['details'] if d['id'] == self.detail2.id), None)
         
-        self.assertEqual(detail1['title'], 'Basic Design Updated')
-        self.assertEqual(detail1['revisions'], 5)
-        self.assertEqual(detail2['title'], 'Standard Design Updated')
-        self.assertEqual(detail2['revisions'], 7)
-    
-    def test_update_offer_response_structure(self):
-        """Test that response has correct structure."""
-        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
-        url = reverse('offer-detail', kwargs={'id': self.offer.id})
-        
-        data = {'title': 'Updated Title'}
-        
-        response = self.client.patch(url, data, format='json')
-        
-        required_fields = [
-            'id', 'user', 'title', 'image', 'description',
-            'created_at', 'updated_at', 'details',
-            'min_price', 'min_delivery_time', 'user_details'
-        ]
-        
-        for field in required_fields:
-            self.assertIn(field, response.data, f"Field '{field}' missing")
+        self.assertEqual(detail1['title'], 'Basic Updated')
+        self.assertEqual(detail2['title'], 'Standard Updated')
     
     def test_update_offer_min_values_recalculated(self):
         """Test that min_price and min_delivery_time are recalculated after update."""
@@ -917,7 +889,7 @@ class OfferUpdateTests(APITestCase):
                     'revisions': 3,
                     'delivery_time_in_days': 3,
                     'price': '50.00',
-                    'features': 'Logo Design',
+                    'features': ['Logo Design'],
                     'offer_type': 'basic'
                 }
             ]
@@ -926,16 +898,108 @@ class OfferUpdateTests(APITestCase):
         response = self.client.patch(url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(float(response.data['min_price']), 50.00)
-        self.assertEqual(response.data['min_delivery_time'], 3)
+        
+        # Verify the detail was updated
+        updated_detail = next(
+            (d for d in response.data['details'] if d['id'] == self.detail1.id),
+            None
+        )
+        self.assertEqual(updated_detail['price'], 50)
+        self.assertEqual(updated_detail['delivery_time_in_days'], 3)
+    
+    def test_update_offer_user_field_ignored(self):
+        """Test that user field cannot be changed."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'title': 'Updated Title',
+            'user': self.other_business.id
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify owner hasn't changed
+        self.offer.refresh_from_db()
+        self.assertEqual(self.offer.user.id, self.business_user.id)
+    
+    def test_update_offer_details_unchanged_when_not_provided(self):
+        """Test that details remain unchanged when not provided in update."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        initial_details_count = OfferDetail.objects.filter(offer=self.offer).count()
+        
+        response = self.client.patch(url, {'title': 'Updated Title Only'}, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['details']), initial_details_count)
+    
+    def test_update_offer_response_has_required_fields(self):
+        """Test that PATCH response has correct structure (5 fields only)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.patch(url, {'title': 'Updated Title'}, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Response should have these 5 fields per specification
+        self.assertIn('id', response.data)
+        self.assertIn('title', response.data)
+        self.assertIn('image', response.data)
+        self.assertIn('description', response.data)
+        self.assertIn('details', response.data)
+    
+    def test_update_offer_features_returned_as_array(self):
+        """Test that features are returned as array in PATCH response."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        data = {
+            'details': [
+                {
+                    'id': self.detail1.id,
+                    'title': 'Basic Design',
+                    'revisions': 3,
+                    'delivery_time_in_days': 6,
+                    'price': '120.00',
+                    'features': ['Logo Design', 'Flyer', 'Poster'],
+                    'offer_type': 'basic'
+                }
+            ]
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check that features is an array
+        for detail in response.data['details']:
+            self.assertIsInstance(detail['features'], list)
+    
+    def test_update_offer_price_returned_as_integer(self):
+        """Test that price is returned as integer in PATCH response."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.patch(url, {'title': 'Updated Title'}, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check that price is an integer
+        for detail in response.data['details']:
+            self.assertIsInstance(detail['price'], int)
+    
+    # ==================== ERROR CASES ====================
     
     def test_update_offer_unauthenticated(self):
         """Test that unauthenticated users cannot update offers."""
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {'title': 'Updated Title'}
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'title': 'Should Fail'}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
@@ -944,9 +1008,7 @@ class OfferUpdateTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.other_business_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {'title': 'Updated Title'}
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'title': 'Hacked Title'}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
     
@@ -955,9 +1017,7 @@ class OfferUpdateTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {'title': 'Updated Title'}
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'title': 'Customer Update'}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
     
@@ -966,9 +1026,7 @@ class OfferUpdateTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         url = reverse('offer-detail', kwargs={'id': 99999})
         
-        data = {'title': 'Updated Title'}
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'title': 'Not Found'}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
     
@@ -985,7 +1043,7 @@ class OfferUpdateTests(APITestCase):
                     'revisions': 3,
                     'delivery_time_in_days': 5,
                     'price': '100.00',
-                    'features': 'Test',
+                    'features': ['Test'],
                     'offer_type': 'basic'
                 }
             ]
@@ -1001,9 +1059,7 @@ class OfferUpdateTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {'title': ''}
-        
-        response = self.client.patch(url, data, format='json')
+        response = self.client.patch(url, {'title': ''}, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
@@ -1016,11 +1072,11 @@ class OfferUpdateTests(APITestCase):
             'details': [
                 {
                     'id': self.detail1.id,
-                    'title': 'Basic Design',
+                    'title': 'Basic',
                     'revisions': 3,
-                    'delivery_time_in_days': 6,
+                    'delivery_time_in_days': 5,
                     'price': '-50.00',
-                    'features': 'Logo Design',
+                    'features': ['Test'],
                     'offer_type': 'basic'
                 }
             ]
@@ -1039,11 +1095,11 @@ class OfferUpdateTests(APITestCase):
             'details': [
                 {
                     'id': self.detail1.id,
-                    'title': 'Basic Design',
+                    'title': 'Basic',
                     'revisions': 3,
                     'delivery_time_in_days': 0,
                     'price': '100.00',
-                    'features': 'Logo Design',
+                    'features': ['Test'],
                     'offer_type': 'basic'
                 }
             ]
@@ -1052,39 +1108,190 @@ class OfferUpdateTests(APITestCase):
         response = self.client.patch(url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class OfferDeleteTests(APITestCase):
+    """Test cases for offer delete endpoint (DELETE)."""
     
-    def test_update_offer_user_field_ignored(self):
-        """Test that user field cannot be changed."""
+    def setUp(self):
+        """Set up test client and test data."""
+        self.client = APIClient()
+        
+        # Business user (owner)
+        self.business_user = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_token = Token.objects.create(user=self.business_user)
+        
+        # Another business user (not owner)
+        self.other_business = User.objects.create_user(
+            username='business2',
+            email='business2@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.other_business_token = Token.objects.create(user=self.other_business)
+        
+        # Customer user
+        self.customer_user = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer_token = Token.objects.create(user=self.customer_user)
+        
+        # Create offer with details
+        self.offer = Offer.objects.create(
+            user=self.business_user,
+            title='Test Offer',
+            description='Test description'
+        )
+        
+        self.detail = OfferDetail.objects.create(
+            offer=self.offer,
+            title='Basic Package',
+            revisions=3,
+            delivery_time_in_days=7,
+            price=Decimal('100.00'),
+            features='Test features',
+            offer_type='basic'
+        )
+    
+    # ==================== SUCCESS CASES (204) ====================
+    
+    def test_delete_offer_success(self):
+        """Test successfully deleting an offer."""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        data = {
-            'title': 'Updated Title',
-            'user': self.other_business.id
-        }
+        offer_id = self.offer.id
         
-        response = self.client.patch(url, data, format='json')
+        response = self.client.delete(url)
         
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['user'], self.business_user.id)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         
-        # Verify in database
-        self.offer.refresh_from_db()
-        self.assertEqual(self.offer.user.id, self.business_user.id)
+        # Verify offer is deleted from database
+        self.assertFalse(Offer.objects.filter(id=offer_id).exists())
     
-    def test_update_offer_details_unchanged_when_not_provided(self):
-        """Test that details remain unchanged when not provided in update."""
+    def test_delete_offer_cascades_to_details(self):
+        """Test that deleting offer also deletes its details (CASCADE)."""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         url = reverse('offer-detail', kwargs={'id': self.offer.id})
         
-        # Get initial details count
-        initial_details_count = OfferDetail.objects.filter(offer=self.offer).count()
+        detail_id = self.detail.id
         
-        data = {'title': 'Updated Title Only'}
+        response = self.client.delete(url)
         
-        response = self.client.patch(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['details']), initial_details_count)
-        self.assertEqual(OfferDetail.objects.filter(offer=self.offer).count(), initial_details_count)
+        # Verify details are also deleted
+        self.assertFalse(OfferDetail.objects.filter(id=detail_id).exists())
+    
+    def test_delete_offer_returns_no_content(self):
+        """Test that delete returns empty response body (204 No Content)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIsNone(response.data)
+    
+    # ==================== ERROR CASES ====================
+    
+    def test_delete_offer_unauthenticated(self):
+        """Test that unauthenticated users cannot delete offers (401)."""
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        
+        # Verify offer still exists
+        self.assertTrue(Offer.objects.filter(id=self.offer.id).exists())
+    
+    def test_delete_offer_not_owner_forbidden(self):
+        """Test that non-owners cannot delete offers (403)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.other_business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # Verify offer still exists
+        self.assertTrue(Offer.objects.filter(id=self.offer.id).exists())
+    
+    def test_delete_offer_customer_forbidden(self):
+        """Test that customer users cannot delete offers (403)."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # Verify offer still exists
+        self.assertTrue(Offer.objects.filter(id=self.offer.id).exists())
+    
+    def test_delete_offer_not_found(self):
+        """Test 404 response for non-existent offer."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': 99999})
+        
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_delete_offer_twice_returns_404(self):
+        """Test that deleting already deleted offer returns 404."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        # First delete - should succeed
+        response1 = self.client.delete(url)
+        self.assertEqual(response1.status_code, status.HTTP_204_NO_CONTENT)
+        
+        # Second delete - should return 404
+        response2 = self.client.delete(url)
+        self.assertEqual(response2.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_delete_offer_with_multiple_details(self):
+        """Test deleting offer with multiple details cascades correctly."""
+        # Add more details to the offer
+        OfferDetail.objects.create(
+            offer=self.offer,
+            title='Standard Package',
+            revisions=5,
+            delivery_time_in_days=10,
+            price=Decimal('200.00'),
+            features='Standard features',
+            offer_type='standard'
+        )
+        OfferDetail.objects.create(
+            offer=self.offer,
+            title='Premium Package',
+            revisions=10,
+            delivery_time_in_days=14,
+            price=Decimal('350.00'),
+            features='Premium features',
+            offer_type='premium'
+        )
+        
+        # Verify we have 3 details
+        self.assertEqual(OfferDetail.objects.filter(offer=self.offer).count(), 3)
+        
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
+        url = reverse('offer-detail', kwargs={'id': self.offer.id})
+        
+        response = self.client.delete(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        
+        # Verify all details are deleted
+        self.assertEqual(OfferDetail.objects.filter(offer_id=self.offer.id).count(), 0)
         

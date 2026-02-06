@@ -151,12 +151,13 @@ class OfferListCreateView(generics.ListCreateAPIView):
             )
 
 
-class OfferDetailUpdateView(generics.RetrieveUpdateAPIView):
+class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
     """
-    API endpoint to retrieve and update a single offer.
+    API endpoint to retrieve, update, and delete a single offer.
     
     GET /api/offers/{id}/ - Retrieve offer (authenticated users)
     PATCH /api/offers/{id}/ - Update offer (owner only)
+    DELETE /api/offers/{id}/ - Delete offer (owner only)
     """
     
     queryset = Offer.objects.select_related('user').prefetch_related('details').all()
@@ -165,9 +166,9 @@ class OfferDetailUpdateView(generics.RetrieveUpdateAPIView):
     def get_permissions(self):
         """
         GET requests need authentication.
-        PATCH requests need authentication + ownership.
+        PATCH and DELETE requests need authentication + ownership.
         """
-        if self.request.method == 'PATCH':
+        if self.request.method in ['PATCH', 'DELETE']:
             return [IsAuthenticated(), IsOfferOwner()]
         return [IsAuthenticated()]
     
@@ -231,6 +232,40 @@ class OfferDetailUpdateView(generics.RetrieveUpdateAPIView):
         except serializers.ValidationError as e:
             # Handle validation errors from serializer.update() method
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        
+        except PermissionDenied:
+            return Response(
+                {'detail': 'You do not have permission to perform this action.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        except Http404:
+            return Response(
+                {'detail': 'Offer not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an existing offer.
+        
+        Returns:
+            204: Offer successfully deleted (no content)
+            401: User not authenticated
+            403: User is not the owner
+            404: Offer not found
+            500: Internal server error
+        """
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
         
         except PermissionDenied:
             return Response(
