@@ -58,6 +58,38 @@ class OfferDetailSerializer(serializers.ModelSerializer):
         return value
 
 
+class OfferDetailSingleSerializer(serializers.ModelSerializer):
+    """
+    Serializer for single OfferDetail retrieval (GET /api/offerdetails/{id}/).
+    Returns features as array and price as integer per specification.
+    """
+    
+    features = serializers.SerializerMethodField()
+    price = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OfferDetail
+        fields = [
+            'id',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type'
+        ]
+    
+    def get_features(self, obj):
+        """Convert features string to array."""
+        if obj.features:
+            return [f.strip() for f in obj.features.split(',') if f.strip()]
+        return []
+    
+    def get_price(self, obj):
+        """Return price as integer."""
+        return int(obj.price)
+
+
 class OfferDetailResponseSerializer(serializers.ModelSerializer):
     """
     Serializer for OfferDetail in PATCH responses.
@@ -82,7 +114,6 @@ class OfferDetailResponseSerializer(serializers.ModelSerializer):
     def get_features(self, obj):
         """Convert features string to array."""
         if obj.features:
-            # Split by comma and strip whitespace
             return [f.strip() for f in obj.features.split(',') if f.strip()]
         return []
     
@@ -103,7 +134,7 @@ class OfferDetailUpdateSerializer(serializers.Serializer):
     revisions = serializers.IntegerField(required=False)
     delivery_time_in_days = serializers.IntegerField(required=False)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
-    features = serializers.JSONField(required=False)  # Accept both string and array
+    features = serializers.JSONField(required=False)
     offer_type = serializers.CharField(max_length=50, required=False)
     
     def validate_price(self, value):
@@ -168,7 +199,7 @@ class OfferListSerializer(serializers.ModelSerializer):
             if request:
                 url = request.build_absolute_uri(f'/api/offerdetails/{detail.id}/')
             else:
-                url = f'/offerdetails/{detail.id}/'
+                url = f'/api/offerdetails/{detail.id}/'
             details_list.append({
                 'id': detail.id,
                 'url': url
@@ -306,27 +337,22 @@ class OfferUpdateSerializer(serializers.ModelSerializer):
         Update offer and nested details.
         Only updates fields that are provided in the request.
         """
-        # Extract details_data from validated_data
         details_data = validated_data.pop('details', None)
         
-        # Update offer fields (title, description, image)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
-        # Update details if provided
         if details_data is not None:
             for detail_data in details_data:
                 detail_id = detail_data.get('id')
                 
                 if detail_id:
-                    # Update existing detail
                     try:
                         detail = OfferDetail.objects.get(id=detail_id, offer=instance)
                         
-                        # Update only provided fields
                         for attr, value in detail_data.items():
-                            if attr != 'id':  # Skip id field
+                            if attr != 'id':
                                 setattr(detail, attr, value)
                         detail.save()
                         
@@ -335,10 +361,8 @@ class OfferUpdateSerializer(serializers.ModelSerializer):
                             'details': f"OfferDetail with id {detail_id} does not exist for this offer."
                         })
                 else:
-                    # Create new detail if no id provided
                     OfferDetail.objects.create(offer=instance, **detail_data)
         
-        # CRITICAL: Refresh instance to get updated related objects
         instance.refresh_from_db()
         
         return instance
@@ -349,10 +373,8 @@ class OfferUpdateSerializer(serializers.ModelSerializer):
         Only: id, title, image, description, details
         With features as array and price as integer.
         """
-        # Refresh to ensure we have the latest data
         instance.refresh_from_db()
         
-        # Get fresh details from DB
         details_queryset = OfferDetail.objects.filter(offer=instance)
         
         return {

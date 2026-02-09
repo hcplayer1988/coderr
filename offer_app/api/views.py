@@ -8,7 +8,12 @@ from django.db.models import Min, Q
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from offer_app.models import Offer, OfferDetail
-from .serializers import OfferListSerializer, OfferCreateSerializer, OfferUpdateSerializer
+from .serializers import (
+    OfferListSerializer,
+    OfferCreateSerializer,
+    OfferUpdateSerializer,
+    OfferDetailSingleSerializer
+)
 from .permissions import IsOfferOwner
 
 
@@ -230,7 +235,6 @@ class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         except serializers.ValidationError as e:
-            # Handle validation errors from serializer.update() method
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         
         except PermissionDenied:
@@ -276,6 +280,46 @@ class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
         except Http404:
             return Response(
                 {'detail': 'Offer not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OfferDetailSingleView(generics.RetrieveAPIView):
+    """
+    API endpoint to retrieve a single offer detail.
+    
+    GET /api/offerdetails/{id}/ - Retrieve offer detail (authenticated users)
+    """
+    
+    queryset = OfferDetail.objects.all()
+    serializer_class = OfferDetailSingleSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a single offer detail by ID.
+        
+        Returns:
+            200: Offer detail data
+            401: User not authenticated
+            404: Offer detail not found
+            500: Internal server error
+        """
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Http404:
+            return Response(
+                {'detail': 'Offer detail not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
