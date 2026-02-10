@@ -26,6 +26,8 @@ class OfferDetailSerializer(serializers.ModelSerializer):
     Used for creating and displaying offer details.
     """
     
+    features = serializers.JSONField()
+    
     class Meta:
         model = OfferDetail
         fields = [
