@@ -117,7 +117,7 @@ class OrderListTests(APITestCase):
             'id', 'customer_user', 'business_user', 'title',
             'revisions', 'delivery_time_in_days', 'price',
             'features', 'offer_type', 'status',
-            'created_at', 'updated_at'
+            'created_at'
         ]
         
         for order in response.data:
@@ -312,7 +312,7 @@ class OrderCreateTests(APITestCase):
         required_fields = [
             'id', 'customer_user', 'business_user', 'title',
             'revisions', 'delivery_time_in_days', 'price',
-            'features', 'offer_type', 'status', 'created_at', 'updated_at'
+            'features', 'offer_type', 'status', 'created_at'
         ]
         
         for field in required_fields:
@@ -333,6 +333,166 @@ class OrderCreateTests(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Order.objects.count(), initial_count + 1)
+
+
+class OrderUpdateTests(APITestCase):
+    """Test cases for order update endpoint (PATCH)."""
+    
+    def setUp(self):
+        """Set up test client and test data."""
+        self.client = APIClient()
+        
+        self.customer_user = User.objects.create_user(
+            username='customer1',
+            email='customer1@test.com',
+            password='TestPass123!',
+            type='customer'
+        )
+        self.customer_token = Token.objects.create(user=self.customer_user)
+        
+        self.business_user1 = User.objects.create_user(
+            username='business1',
+            email='business1@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_token1 = Token.objects.create(user=self.business_user1)
+        
+        self.business_user2 = User.objects.create_user(
+            username='business2',
+            email='business2@test.com',
+            password='TestPass123!',
+            type='business'
+        )
+        self.business_token2 = Token.objects.create(user=self.business_user2)
+        
+        self.order = Order.objects.create(
+            customer_user=self.customer_user,
+            business_user=self.business_user1,
+            title='Logo Design',
+            revisions=3,
+            delivery_time_in_days=5,
+            price=Decimal('150.00'),
+            features=['Logo Design', 'Visitenkarten'],
+            offer_type='basic',
+            status='in_progress'
+        )
+    
+    def test_update_order_status_success(self):
+        """Test successfully updating order status to completed."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token1.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {'status': 'completed'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'completed')
+        self.assertEqual(response.data['id'], self.order.id)
+        
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'completed')
+    
+    def test_update_order_has_updated_at(self):
+        """Test that response includes updated_at field."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token1.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {'status': 'cancelled'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('updated_at', response.data)
+        self.assertIn('created_at', response.data)
+    
+    def test_update_order_unauthenticated(self):
+        """Test that unauthenticated users cannot update orders."""
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {'status': 'completed'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_update_order_customer_forbidden(self):
+        """Test that customer users cannot update order status."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {'status': 'completed'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_update_order_wrong_business_user_forbidden(self):
+        """Test that business users can only update their own orders."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token2.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {'status': 'completed'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_update_order_invalid_status(self):
+        """Test validation error for invalid status."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token1.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {'status': 'invalid_status'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('status', response.data)
+    
+    def test_update_order_not_found(self):
+        """Test 404 for non-existent order."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token1.key}')
+        url = reverse('order-update', kwargs={'id': 99999})
+        
+        data = {'status': 'completed'}
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_update_order_cannot_change_other_fields(self):
+        """Test that other fields remain read-only."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token1.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        data = {
+            'status': 'completed',
+            'title': 'Changed Title',
+            'price': '999.99'
+        }
+        
+        response = self.client.patch(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'completed')
+        self.assertEqual(response.data['title'], 'Logo Design')
+        self.assertEqual(float(response.data['price']), 150.00)
+    
+    def test_update_order_all_status_values(self):
+        """Test all valid status values."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token1.key}')
+        url = reverse('order-update', kwargs={'id': self.order.id})
+        
+        valid_statuses = ['in_progress', 'completed', 'cancelled']
+        
+        for status_value in valid_statuses:
+            data = {'status': status_value}
+            response = self.client.patch(url, data, format='json')
+            
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['status'], status_value)
         
 
 

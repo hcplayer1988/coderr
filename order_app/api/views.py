@@ -2,9 +2,12 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
+from django.http import Http404
 from order_app.models import Order
-from .serializers import OrderListSerializer, OrderCreateSerializer
+from .serializers import OrderListSerializer, OrderCreateSerializer, OrderUpdateSerializer
+from .permissions import IsBusinessUserOfOrder
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -82,6 +85,62 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 )
             
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OrderUpdateView(generics.UpdateAPIView):
+    """
+    API endpoint to update order status.
+    Only business users who are part of the order can update it.
+    
+    PATCH /api/orders/{id}/
+    """
+    
+    serializer_class = OrderUpdateSerializer
+    permission_classes = [IsAuthenticated, IsBusinessUserOfOrder]
+    queryset = Order.objects.all()
+    lookup_field = 'id'
+    http_method_names = ['patch', 'options', 'head']
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Update order status (partial update only).
+        
+        Returns:
+            200: Order successfully updated
+            400: Validation errors (invalid status)
+            401: User not authenticated
+            403: User is not the business user of this order
+            404: Order not found
+            500: Internal server error
+        """
+        try:
+            instance = self.get_object()
+            
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except PermissionDenied:
+            return Response(
+                {'detail': 'You do not have permission to perform this action.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        except Http404:
+            return Response(
+                {'detail': 'Order not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         
         except Exception as e:
             return Response(

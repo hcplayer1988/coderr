@@ -59,6 +59,83 @@ class OrderListSerializer(serializers.ModelSerializer):
         return []
 
 
+class OrderUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating order status.
+    Only allows updating the status field.
+    Returns updated order with updated_at timestamp.
+    """
+    
+    features = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Order
+        fields = [
+            'id',
+            'customer_user',
+            'business_user',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type',
+            'status',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = [
+            'id',
+            'customer_user',
+            'business_user',
+            'title',
+            'revisions',
+            'delivery_time_in_days',
+            'price',
+            'features',
+            'offer_type',
+            'created_at',
+            'updated_at'
+        ]
+    
+    def get_features(self, obj):
+        """Ensure features is returned as a list."""
+        features = obj.features
+        
+        if isinstance(features, list):
+            return features
+        
+        if isinstance(features, str):
+            if features.startswith('[') and features.endswith(']'):
+                try:
+                    import ast
+                    return ast.literal_eval(features)
+                except (ValueError, SyntaxError):
+                    pass
+            
+            try:
+                parsed = json.loads(features)
+                if isinstance(parsed, list):
+                    return parsed
+                elif isinstance(parsed, str):
+                    return json.loads(parsed)
+                else:
+                    return [parsed]
+            except (json.JSONDecodeError, TypeError, ValueError):
+                return [features]
+        
+        return []
+    
+    def validate_status(self, value):
+        """Validate that status is one of the allowed choices."""
+        allowed_statuses = ['in_progress', 'completed', 'cancelled']
+        if value not in allowed_statuses:
+            raise serializers.ValidationError(
+                f"Invalid status. Must be one of: {', '.join(allowed_statuses)}"
+            )
+        return value
+
+
 class OrderCreateSerializer(serializers.Serializer):
     """
     Serializer for creating orders from an OfferDetail.
@@ -99,4 +176,5 @@ class OrderCreateSerializer(serializers.Serializer):
     def to_representation(self, instance):
         """Return full order data using OrderListSerializer."""
         return OrderListSerializer(instance).data
+
 
