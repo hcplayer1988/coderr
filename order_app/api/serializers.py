@@ -34,35 +34,28 @@ class OrderListSerializer(serializers.ModelSerializer):
         """Ensure features is returned as a list."""
         features = obj.features
         
-        # If it's already a list, return it
         if isinstance(features, list):
             return features
         
-        # If it's a string, we need to handle it
         if isinstance(features, str):
-            # Check if it's a string representation of a Python list (e.g., "['item1', 'item2']")
             if features.startswith('[') and features.endswith(']'):
                 try:
-                    # Use ast.literal_eval for safe evaluation of Python literals
                     import ast
                     return ast.literal_eval(features)
                 except (ValueError, SyntaxError):
                     pass
             
-            # Try JSON parsing
             try:
                 parsed = json.loads(features)
                 if isinstance(parsed, list):
                     return parsed
                 elif isinstance(parsed, str):
-                    # Double-stringified - try again
                     return json.loads(parsed)
                 else:
                     return [parsed]
             except (json.JSONDecodeError, TypeError, ValueError):
                 return [features]
         
-        # Default: return empty list
         return []
 
 
@@ -78,7 +71,6 @@ class OrderCreateSerializer(serializers.Serializer):
         """Validate that the offer_detail exists."""
         try:
             offer_detail = OfferDetail.objects.select_related('offer__user').get(id=value)
-            # Store for later use in create()
             self.offer_detail = offer_detail
             return value
         except OfferDetail.DoesNotExist:
@@ -90,7 +82,6 @@ class OrderCreateSerializer(serializers.Serializer):
         customer_user = self.context['request'].user
         business_user = offer_detail.offer.user
         
-        # Create order with data from offer_detail
         order = Order.objects.create(
             customer_user=customer_user,
             business_user=business_user,

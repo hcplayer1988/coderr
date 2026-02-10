@@ -18,7 +18,6 @@ class OrderListTests(APITestCase):
         """Set up test client and test data."""
         self.client = APIClient()
         
-        # Create customer user
         self.customer_user = User.objects.create_user(
             username='customer1',
             email='customer1@test.com',
@@ -27,7 +26,6 @@ class OrderListTests(APITestCase):
         )
         self.customer_token = Token.objects.create(user=self.customer_user)
         
-        # Create business user 1
         self.business_user1 = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -36,7 +34,6 @@ class OrderListTests(APITestCase):
         )
         self.business_token1 = Token.objects.create(user=self.business_user1)
         
-        # Create business user 2
         self.business_user2 = User.objects.create_user(
             username='business2',
             email='business2@test.com',
@@ -45,7 +42,6 @@ class OrderListTests(APITestCase):
         )
         self.business_token2 = Token.objects.create(user=self.business_user2)
         
-        # Create orders for customer1 with business1
         self.order1 = Order.objects.create(
             customer_user=self.customer_user,
             business_user=self.business_user1,
@@ -70,7 +66,6 @@ class OrderListTests(APITestCase):
             status='completed'
         )
         
-        # Create order with business2 (should not be visible to customer1 or business1)
         self.order3 = Order.objects.create(
             customer_user=self.customer_user,
             business_user=self.business_user2,
@@ -91,7 +86,7 @@ class OrderListTests(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)  # Customer sees all 3 orders
+        self.assertEqual(len(response.data), 3)
     
     def test_list_orders_success_business(self):
         """Test listing orders as business user."""
@@ -101,7 +96,7 @@ class OrderListTests(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)  # Business1 sees only their 2 orders
+        self.assertEqual(len(response.data), 2)
     
     def test_list_orders_unauthenticated(self):
         """Test that unauthenticated users cannot list orders."""
@@ -136,7 +131,6 @@ class OrderListTests(APITestCase):
         
         response = self.client.get(url)
         
-        # Find order1 in response
         order1_data = next(o for o in response.data if o['id'] == self.order1.id)
         
         self.assertEqual(order1_data['title'], 'Logo Design')
@@ -157,7 +151,7 @@ class OrderListTests(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)  # Business2 sees only their 1 order
+        self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['id'], self.order3.id)
     
     def test_list_orders_empty_for_new_user(self):
@@ -185,7 +179,6 @@ class OrderListTests(APITestCase):
         
         response = self.client.get(url)
         
-        # Order3 was created last, so it should be first
         self.assertEqual(response.data[0]['id'], self.order3.id)
 
 
@@ -196,7 +189,6 @@ class OrderCreateTests(APITestCase):
         """Set up test client and test data."""
         self.client = APIClient()
         
-        # Create customer user
         self.customer_user = User.objects.create_user(
             username='customer1',
             email='customer1@test.com',
@@ -205,7 +197,6 @@ class OrderCreateTests(APITestCase):
         )
         self.customer_token = Token.objects.create(user=self.customer_user)
         
-        # Create business user
         self.business_user = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -214,14 +205,12 @@ class OrderCreateTests(APITestCase):
         )
         self.business_token = Token.objects.create(user=self.business_user)
         
-        # Create offer
         self.offer = Offer.objects.create(
             user=self.business_user,
             title='Logo Design Package',
             description='Professional logo design'
         )
         
-        # Create offer detail
         self.offer_detail = OfferDetail.objects.create(
             offer=self.offer,
             title='Basic Package',
@@ -251,7 +240,6 @@ class OrderCreateTests(APITestCase):
         self.assertEqual(response.data['delivery_time_in_days'], 5)
         self.assertEqual(float(response.data['price']), 150.00)
         
-        # Features should be a list after serializer processing
         self.assertIsInstance(response.data['features'], list)
         self.assertEqual(response.data['features'], ['Logo Design', 'Visitenkarten'])
         
