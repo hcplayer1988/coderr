@@ -11,7 +11,7 @@ urlpatterns = [
     path('api/', include('profile_app.api.urls')),
     path('api/', include('offer_app.api.urls')),
     path('api/', include('order_app.api.urls')),
-    #path('api/', include('reviews_app.api.urls')),
+    path('api/', include('reviews_app.api.urls')),
     #path('api/', include('general_app.api.urls')),
 ]
 
