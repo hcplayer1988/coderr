@@ -17,7 +17,6 @@ class OrderAPITestCase(APITestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data once for all tests."""
-        # Create users
         cls.customer_user = User.objects.create_user(
             username='customer',
             email='customer@test.com',
@@ -47,13 +46,11 @@ class OrderAPITestCase(APITestCase):
             is_staff=True
         )
         
-        # Create tokens
         cls.customer_token = Token.objects.create(user=cls.customer_user)
         cls.business_token1 = Token.objects.create(user=cls.business_user1)
         cls.business_token2 = Token.objects.create(user=cls.business_user2)
         cls.admin_token = Token.objects.create(user=cls.admin_user)
         
-        # Create offer and offer detail for order creation
         cls.offer = Offer.objects.create(
             user=cls.business_user1,
             title='Test Offer',
@@ -83,7 +80,6 @@ class OrderListTests(OrderAPITestCase):
         """Create test orders."""
         super().setUpTestData()
         
-        # Create test orders
         cls.order1 = Order.objects.create(
             customer_user=cls.customer_user,
             business_user=cls.business_user1,
@@ -161,9 +157,7 @@ class OrderListTests(OrderAPITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
         response = self.client.get(reverse('order-list'))
         
-        # order3 was created last, should be first
         self.assertEqual(response.data[0]['id'], self.order3.id)
-
 
 class OrderCreateTests(OrderAPITestCase):
     """Test POST /api/orders/ endpoint."""
@@ -213,7 +207,6 @@ class OrderCreateTests(OrderAPITestCase):
         response = self.client.post(reverse('order-list'), data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
 
 class OrderUpdateTests(OrderAPITestCase):
     """Test PATCH /api/orders/{id}/ endpoint."""
@@ -307,7 +300,6 @@ class OrderUpdateTests(OrderAPITestCase):
         self.assertEqual(response.data['status'], 'completed')
         self.assertEqual(response.data['title'], 'Test Order')
         self.assertEqual(float(response.data['price']), 150.00)
-
 
 class OrderDeleteTests(OrderAPITestCase):
     """Test DELETE /api/orders/{id}/ endpoint."""
@@ -415,7 +407,6 @@ class OrderCountTests(OrderAPITestCase):
         """Create test orders."""
         super().setUpTestData()
         
-        # 3 in_progress orders for business_user1
         for i in range(3):
             Order.objects.create(
                 customer_user=cls.customer_user,
@@ -429,7 +420,6 @@ class OrderCountTests(OrderAPITestCase):
                 status='in_progress'
             )
         
-        # 2 completed orders (should NOT be counted)
         for i in range(2):
             Order.objects.create(
                 customer_user=cls.customer_user,
