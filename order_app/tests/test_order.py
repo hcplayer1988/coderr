@@ -159,6 +159,7 @@ class OrderListTests(OrderAPITestCase):
         
         self.assertEqual(response.data[0]['id'], self.order3.id)
 
+
 class OrderCreateTests(OrderAPITestCase):
     """Test POST /api/orders/ endpoint."""
     
@@ -207,6 +208,7 @@ class OrderCreateTests(OrderAPITestCase):
         response = self.client.post(reverse('order-list'), data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
 
 class OrderUpdateTests(OrderAPITestCase):
     """Test PATCH /api/orders/{id}/ endpoint."""
@@ -300,6 +302,7 @@ class OrderUpdateTests(OrderAPITestCase):
         self.assertEqual(response.data['status'], 'completed')
         self.assertEqual(response.data['title'], 'Test Order')
         self.assertEqual(float(response.data['price']), 150.00)
+
 
 class OrderDeleteTests(OrderAPITestCase):
     """Test DELETE /api/orders/{id}/ endpoint."""
@@ -464,6 +467,76 @@ class OrderCountTests(OrderAPITestCase):
         """Non-existent user returns 404."""
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
         url = reverse('order-count', kwargs={'business_user_id': 99999})
+        
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class CompletedOrderCountTests(OrderAPITestCase):
+    """Test GET /api/completed-order-count/{business_user_id}/ endpoint."""
+    
+    @classmethod
+    def setUpTestData(cls):
+        """Create test orders."""
+        super().setUpTestData()
+        
+        for i in range(2):
+            Order.objects.create(
+                customer_user=cls.customer_user,
+                business_user=cls.business_user1,
+                title=f'Completed Order {i+1}',
+                revisions=3,
+                delivery_time_in_days=5,
+                price=Decimal('150.00'),
+                features=['Feature'],
+                offer_type='basic',
+                status='completed'
+            )
+        
+        for i in range(3):
+            Order.objects.create(
+                customer_user=cls.customer_user,
+                business_user=cls.business_user1,
+                title=f'In Progress {i+1}',
+                revisions=3,
+                delivery_time_in_days=5,
+                price=Decimal('150.00'),
+                features=['Feature'],
+                offer_type='basic',
+                status='in_progress'
+            )
+    
+    def test_completed_order_count_success(self):
+        """Get count of completed orders."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('completed-order-count', kwargs={'business_user_id': self.business_user1.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['completed_order_count'], 2)
+    
+    def test_completed_order_count_zero(self):
+        """Business user with no completed orders returns 0."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('completed-order-count', kwargs={'business_user_id': self.business_user2.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['completed_order_count'], 0)
+    
+    def test_completed_order_count_unauthenticated(self):
+        """Unauthenticated request returns 401."""
+        url = reverse('completed-order-count', kwargs={'business_user_id': self.business_user1.id})
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_completed_order_count_user_not_found(self):
+        """Non-existent user returns 404."""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.customer_token.key}')
+        url = reverse('completed-order-count', kwargs={'business_user_id': 99999})
         
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
