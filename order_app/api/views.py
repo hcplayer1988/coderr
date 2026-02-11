@@ -194,5 +194,53 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
 
 
+class OrderCountView(generics.GenericAPIView):
+    """
+    API endpoint to get count of in_progress orders for a business user.
+    
+    GET /api/order-count/{business_user_id}/
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, business_user_id):
+        """
+        Get count of in_progress orders for a business user.
+        
+        Returns:
+            200: Order count
+            401: User not authenticated
+            404: Business user not found
+            500: Internal server error
+        """
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            try:
+                business_user = User.objects.get(id=business_user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {'detail': 'Business user not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            order_count = Order.objects.filter(
+                business_user_id=business_user_id,
+                status='in_progress'
+            ).count()
+            
+            return Response(
+                {'order_count': order_count},
+                status=status.HTTP_200_OK
+            )
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 
 
