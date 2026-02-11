@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.http import Http404
 from order_app.models import Order
 from .serializers import OrderListSerializer, OrderCreateSerializer, OrderUpdateSerializer
-from .permissions import IsBusinessUserOfOrder
+from .permissions import IsBusinessUserOfOrder, IsAdminUser
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -93,19 +93,30 @@ class OrderListCreateView(generics.ListCreateAPIView):
             )
 
 
-class OrderUpdateView(generics.UpdateAPIView):
+class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
-    API endpoint to update order status.
-    Only business users who are part of the order can update it.
+    API endpoint to update and delete orders.
     
-    PATCH /api/orders/{id}/
+    PATCH /api/orders/{id}/ - Update order status (business user only)
+    DELETE /api/orders/{id}/ - Delete order (admin only)
     """
     
-    serializer_class = OrderUpdateSerializer
-    permission_classes = [IsAuthenticated, IsBusinessUserOfOrder]
     queryset = Order.objects.all()
     lookup_field = 'id'
-    http_method_names = ['patch', 'options', 'head']
+    http_method_names = ['patch', 'delete', 'options', 'head']
+    
+    def get_permissions(self):
+        """
+        PATCH requires IsAuthenticated + IsBusinessUserOfOrder.
+        DELETE requires IsAuthenticated + IsAdminUser.
+        """
+        if self.request.method == 'DELETE':
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated(), IsBusinessUserOfOrder()]
+    
+    def get_serializer_class(self):
+        """Use OrderUpdateSerializer for PATCH."""
+        return OrderUpdateSerializer
     
     def update(self, request, *args, **kwargs):
         """
@@ -129,6 +140,40 @@ class OrderUpdateView(generics.UpdateAPIView):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except PermissionDenied:
+            return Response(
+                {'detail': 'You do not have permission to perform this action.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        except Http404:
+            return Response(
+                {'detail': 'Order not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an order.
+        
+        Returns:
+            204: Order successfully deleted (no content)
+            401: User not authenticated
+            403: User is not admin/staff
+            404: Order not found
+            500: Internal server error
+        """
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
         
         except PermissionDenied:
             return Response(

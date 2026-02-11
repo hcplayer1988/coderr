@@ -20,3 +20,15 @@ class IsBusinessUserOfOrder(permissions.BasePermission):
         return obj.business_user == request.user
 
 
+class IsAdminUser(permissions.BasePermission):
+    """
+    Custom permission to only allow admin/staff users to delete orders.
+    """
+    
+    def has_permission(self, request, view):
+        """
+        Check if user is staff/admin.
+        """
+        return request.user and request.user.is_staff
+
+
