@@ -16,7 +16,6 @@ class ProfileDetailTests(APITestCase):
         """Set up test client and test users."""
         self.client = APIClient()
         
-        # Create test customer user
         self.customer_user = User.objects.create_user(
             username='testcustomer',
             email='customer@test.com',
@@ -25,7 +24,6 @@ class ProfileDetailTests(APITestCase):
         )
         self.customer_token = Token.objects.create(user=self.customer_user)
         
-        # Create test business user
         self.business_user = User.objects.create_user(
             username='testbusiness',
             email='business@test.com',
@@ -34,7 +32,6 @@ class ProfileDetailTests(APITestCase):
         )
         self.business_token = Token.objects.create(user=self.business_user)
         
-        # Update customer profile with data
         self.customer_profile = self.customer_user.profile
         self.customer_profile.first_name = 'John'
         self.customer_profile.last_name = 'Doe'
@@ -43,7 +40,6 @@ class ProfileDetailTests(APITestCase):
         self.customer_profile.description = 'Customer description'
         self.customer_profile.save()
         
-        # Update business profile with data
         self.business_profile = self.business_user.profile
         self.business_profile.first_name = 'Max'
         self.business_profile.last_name = 'Mustermann'
@@ -114,7 +110,6 @@ class ProfileDetailTests(APITestCase):
     
     def test_profile_empty_fields_return_empty_strings(self):
         """Test that empty profile fields return empty strings, not null."""
-        # Create user with empty profile
         empty_user = User.objects.create_user(
             username='emptyuser',
             email='empty@test.com',
@@ -129,7 +124,6 @@ class ProfileDetailTests(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # These fields should be empty strings, not null
         self.assertEqual(response.data['first_name'], '')
         self.assertEqual(response.data['last_name'], '')
         self.assertEqual(response.data['location'], '')
@@ -146,7 +140,6 @@ class ProfileDetailTests(APITestCase):
             type='customer'
         )
         
-        # Check that profile exists
         self.assertTrue(hasattr(new_user, 'profile'))
         self.assertIsNotNone(new_user.profile)
         self.assertEqual(new_user.profile.user, new_user)
@@ -175,7 +168,6 @@ class ProfileUpdateTests(APITestCase):
         """Set up test client and test users."""
         self.client = APIClient()
         
-        # Create test users
         self.user1 = User.objects.create_user(
             username='user1',
             email='user1@test.com',
@@ -216,7 +208,6 @@ class ProfileUpdateTests(APITestCase):
         self.assertEqual(response.data['description'], 'Updated description')
         self.assertEqual(response.data['working_hours'], '10-18')
         
-        # Verify database was updated
         self.user1.profile.refresh_from_db()
         self.assertEqual(self.user1.profile.first_name, 'Updated')
     
@@ -250,7 +241,6 @@ class ProfileUpdateTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['email'], 'newemail@test.com')
         
-        # Verify user email was updated
         self.user1.refresh_from_db()
         self.assertEqual(self.user1.email, 'newemail@test.com')
     
@@ -267,7 +257,6 @@ class ProfileUpdateTests(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         
-        # Verify profile was not updated
         self.user2.profile.refresh_from_db()
         self.assertNotEqual(self.user2.profile.first_name, 'Hacked')
     
@@ -327,12 +316,10 @@ class ProfileUpdateTests(APITestCase):
         
         response = self.client.patch(url, data, format='json')
         
-        # Check that response has the required fields
         self.assertIn('last_name', response.data)
         self.assertIn('location', response.data)
         self.assertIn('tel', response.data)
         
-        # Empty fields should be empty strings
         self.assertEqual(response.data['last_name'], '')
         self.assertEqual(response.data['location'], '')
         self.assertEqual(response.data['tel'], '')
@@ -345,7 +332,6 @@ class BusinessProfileListTests(APITestCase):
         """Set up test client and test users."""
         self.client = APIClient()
         
-        # Create test users
         self.customer = User.objects.create_user(
             username='customer1',
             email='customer1@test.com',
@@ -354,7 +340,6 @@ class BusinessProfileListTests(APITestCase):
         )
         self.customer_token = Token.objects.create(user=self.customer)
         
-        # Create multiple business users
         self.business1 = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -386,7 +371,6 @@ class BusinessProfileListTests(APITestCase):
         self.assertIsInstance(response.data, list)
         self.assertEqual(len(response.data), 2)
         
-        # Check that all returned profiles are business type
         for profile in response.data:
             self.assertEqual(profile['type'], 'business')
     
@@ -422,7 +406,6 @@ class CustomerProfileListTests(APITestCase):
         """Set up test client and test users."""
         self.client = APIClient()
         
-        # Create test business user (for authentication)
         self.business = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -431,7 +414,6 @@ class CustomerProfileListTests(APITestCase):
         )
         self.business_token = Token.objects.create(user=self.business)
         
-        # Create multiple customer users
         self.customer1 = User.objects.create_user(
             username='customer1',
             email='customer1@test.com',
@@ -463,7 +445,6 @@ class CustomerProfileListTests(APITestCase):
         self.assertIsInstance(response.data, list)
         self.assertEqual(len(response.data), 2)
         
-        # Check that all returned profiles are customer type
         for profile in response.data:
             self.assertEqual(profile['type'], 'customer')
     

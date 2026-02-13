@@ -58,10 +58,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create new user with hashed password."""
-        # Remove repeated_password as it's not part of the User model
         validated_data.pop('repeated_password')
         
-        # Create user with create_user method to properly hash password
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
@@ -98,7 +96,6 @@ class LoginSerializer(serializers.Serializer):
                 'detail': 'Username and password are required.'
             })
         
-        # Authenticate user
         user = authenticate(username=username, password=password)
         
         if user is None:
@@ -111,6 +108,5 @@ class LoginSerializer(serializers.Serializer):
                 'detail': 'User account is disabled.'
             })
         
-        # Attach user to validated data for use in view
         data['user'] = user
         return data

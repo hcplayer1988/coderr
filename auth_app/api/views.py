@@ -40,13 +40,10 @@ class RegistrationView(generics.GenericAPIView):
             serializer = self.get_serializer(data=request.data)
             
             if serializer.is_valid():
-                # Create user
                 user = serializer.save()
                 
-                # Generate or get token for the user
                 token, created = Token.objects.get_or_create(user=user)
                 
-                # Prepare success response
                 response_data = {
                     'token': token.key,
                     'username': user.username,
@@ -57,11 +54,9 @@ class RegistrationView(generics.GenericAPIView):
                 return Response(response_data, status=status.HTTP_201_CREATED)
             
             else:
-                # Return validation errors
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
-            # Handle unexpected errors
             return Response(
                 {'error': 'Internal server error', 'detail': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -96,13 +91,10 @@ class LoginView(generics.GenericAPIView):
             serializer = self.get_serializer(data=request.data)
             
             if serializer.is_valid():
-                # Get authenticated user from serializer
                 user = serializer.validated_data['user']
                 
-                # Get or create token for the user
                 token, created = Token.objects.get_or_create(user=user)
                 
-                # Prepare success response
                 response_data = {
                     'token': token.key,
                     'username': user.username,
@@ -113,11 +105,9 @@ class LoginView(generics.GenericAPIView):
                 return Response(response_data, status=status.HTTP_200_OK)
             
             else:
-                # Return validation errors
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
-            # Handle unexpected errors
             return Response(
                 {'error': 'Internal server error', 'detail': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
