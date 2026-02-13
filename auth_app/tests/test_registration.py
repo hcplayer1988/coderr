@@ -11,12 +11,12 @@ User = get_user_model()
 class RegistrationTests(APITestCase):
     """Test cases for user registration endpoint."""
     
-    def setUp(self):
-        """Set up test client and initial data."""
-        self.client = APIClient()
-        self.registration_url = reverse('registration')
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data once for all tests."""
+        cls.registration_url = reverse('registration')
         
-        self.valid_customer_data = {
+        cls.valid_customer_data = {
             'username': 'testcustomer',
             'email': 'customer@example.com',
             'password': 'TestPass123!',
@@ -24,13 +24,17 @@ class RegistrationTests(APITestCase):
             'type': 'customer'
         }
         
-        self.valid_business_data = {
+        cls.valid_business_data = {
             'username': 'testbusiness',
             'email': 'business@example.com',
             'password': 'TestPass123!',
             'repeated_password': 'TestPass123!',
             'type': 'business'
         }
+    
+    def setUp(self):
+        """Set up test client for each test."""
+        self.client = APIClient()
     
     def test_register_customer_success(self):
         """Test successful customer registration."""
@@ -103,29 +107,43 @@ class RegistrationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('email', response.data)
     
-    def test_register_missing_fields(self):
-        """Test registration fails when required fields are missing."""
+    def test_register_missing_username(self):
+        """Test registration fails when username is missing."""
         data = self.valid_customer_data.copy()
         del data['username']
+        
         response = self.client.post(self.registration_url, data, format='json')
+        
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('username', response.data)
-        
+    
+    def test_register_missing_email(self):
+        """Test registration fails when email is missing."""
         data = self.valid_customer_data.copy()
         del data['email']
+        
         response = self.client.post(self.registration_url, data, format='json')
+        
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('email', response.data)
-        
+    
+    def test_register_missing_password(self):
+        """Test registration fails when password is missing."""
         data = self.valid_customer_data.copy()
         del data['password']
+        
         response = self.client.post(self.registration_url, data, format='json')
+        
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('password', response.data)
-        
+    
+    def test_register_missing_type(self):
+        """Test registration fails when type is missing."""
         data = self.valid_customer_data.copy()
         del data['type']
+        
         response = self.client.post(self.registration_url, data, format='json')
+        
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('type', response.data)
     

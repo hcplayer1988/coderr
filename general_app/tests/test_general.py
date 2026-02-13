@@ -15,7 +15,7 @@ class BaseInfoTests(APITestCase):
     
     @classmethod
     def setUpTestData(cls):
-        """Set up test data."""
+        """Set up test data once for all tests."""
         cls.business1 = User.objects.create_user(
             username='business1',
             email='business1@test.com',
@@ -105,11 +105,11 @@ class BaseInfoTests(APITestCase):
         )
     
     def setUp(self):
-        """Set up test client."""
+        """Set up test client for each test."""
         self.client = APIClient()
     
     def test_base_info_success(self):
-        """Test getting base info successfully."""
+        """Test getting base info successfully with correct statistics."""
         response = self.client.get(reverse('base-info'))
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -119,7 +119,7 @@ class BaseInfoTests(APITestCase):
         self.assertEqual(response.data['offer_count'], 2)
     
     def test_base_info_no_authentication_required(self):
-        """Test that no authentication is required."""
+        """Test that no authentication is required (public endpoint)."""
         response = self.client.get(reverse('base-info'))
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -139,6 +139,15 @@ class BaseInfoTests(APITestCase):
         for field in required_fields:
             self.assertIn(field, response.data)
     
+    def test_base_info_field_types(self):
+        """Test that fields have correct data types."""
+        response = self.client.get(reverse('base-info'))
+        
+        self.assertIsInstance(response.data['review_count'], int)
+        self.assertIsInstance(response.data['business_profile_count'], int)
+        self.assertIsInstance(response.data['offer_count'], int)
+        self.assertIsInstance(response.data['average_rating'], float)
+    
     def test_base_info_average_rating_rounded(self):
         """Test that average rating is rounded to 1 decimal place."""
         response = self.client.get(reverse('base-info'))
@@ -146,7 +155,7 @@ class BaseInfoTests(APITestCase):
         self.assertEqual(float(response.data['average_rating']), 4.7)
     
     def test_base_info_empty_database(self):
-        """Test base info when database is empty."""
+        """Test base info when database is empty (returns zeros)."""
         Review.objects.all().delete()
         Offer.objects.all().delete()
         User.objects.filter(type='business').delete()
@@ -158,14 +167,5 @@ class BaseInfoTests(APITestCase):
         self.assertEqual(float(response.data['average_rating']), 0.0)
         self.assertEqual(response.data['business_profile_count'], 0)
         self.assertEqual(response.data['offer_count'], 0)
-    
-    def test_base_info_field_types(self):
-        """Test that fields have correct data types."""
-        response = self.client.get(reverse('base-info'))
-        
-        self.assertIsInstance(response.data['review_count'], int)
-        self.assertIsInstance(response.data['business_profile_count'], int)
-        self.assertIsInstance(response.data['offer_count'], int)
-        self.assertIsInstance(response.data['average_rating'], float)
         
 

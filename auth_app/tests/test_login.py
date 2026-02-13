@@ -7,25 +7,37 @@ from rest_framework.authtoken.models import Token
 
 User = get_user_model()
 
+
 class LoginTests(APITestCase):
     """Test cases for user login endpoint."""
     
-    def setUp(self):
-        """Set up test client and create test user."""
-        self.client = APIClient()
-        self.login_url = reverse('login')
-        
-        self.test_user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data once for all tests."""
+        cls.test_user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
             password='TestPass123!',
             type='customer'
         )
         
-        self.valid_credentials = {
+        cls.inactive_user = User.objects.create_user(
+            username='inactiveuser',
+            email='inactive@example.com',
+            password='TestPass123!',
+            type='customer',
+            is_active=False
+        )
+        
+        cls.valid_credentials = {
             'username': 'testuser',
             'password': 'TestPass123!'
         }
+    
+    def setUp(self):
+        """Set up test client for each test."""
+        self.client = APIClient()
+        self.login_url = reverse('login')
     
     def test_login_success(self):
         """Test successful login with correct credentials."""
@@ -106,15 +118,6 @@ class LoginTests(APITestCase):
     
     def test_login_inactive_user(self):
         """Test login fails for inactive user."""
-        inactive_user = User.objects.create_user(
-            username='inactiveuser',
-            email='inactive@example.com',
-            password='TestPass123!',
-            type='customer'
-        )
-        inactive_user.is_active = False
-        inactive_user.save()
-        
         credentials = {
             'username': 'inactiveuser',
             'password': 'TestPass123!'
