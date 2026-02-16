@@ -9,6 +9,7 @@ from decimal import Decimal
 
 User = get_user_model()
 
+
 class OfferListTests(APITestCase):
     
     @classmethod
@@ -112,6 +113,7 @@ class OfferListTests(APITestCase):
         response = self.client.get(reverse('offer-list'))
         first_offer = response.data['results'][0]
         self.assertIsInstance(first_offer['details'], list)
+
 
 class OfferCreateTests(APITestCase):
     
@@ -222,6 +224,7 @@ class OfferCreateTests(APITestCase):
         response = self.client.post(reverse('offer-list'), self.valid_offer_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
+
 class OfferDetailViewTests(APITestCase):
     
     @classmethod
@@ -286,6 +289,7 @@ class OfferDetailViewTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {other_token.key}')
         response = self.client.get(reverse('offer-detail', kwargs={'id': self.offer.id}))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
 
 class OfferUpdateTests(APITestCase):
     
@@ -357,6 +361,7 @@ class OfferUpdateTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         response = self.client.patch(reverse('offer-detail', kwargs={'id': self.offer.id}), {'title': ''}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
 
 class OfferDeleteTests(APITestCase):
     
@@ -433,6 +438,7 @@ class OfferDeleteTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(OfferDetail.objects.filter(offer_id=self.offer.id).count(), 0)
 
+
 class OfferDetailSingleTests(APITestCase):
     
     @classmethod
@@ -489,4 +495,160 @@ class OfferDetailSingleTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.business_token.key}')
         response = self.client.get(reverse('offerdetail-single', kwargs={'id': 99999}))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class OfferModelTests(APITestCase):
+    """Tests for Offer model properties and methods."""
+    
+    @classmethod
+    def setUpTestData(cls):
+        cls.business_user = User.objects.create_user(username='business1', email='business1@test.com', password='TestPass123!', type='business')
+        cls.customer_user = User.objects.create_user(username='customer1', email='customer1@test.com', password='TestPass123!', type='customer')
+    
+    def test_offer_str_method(self):
+        """Test Offer __str__ method."""
+        offer = Offer.objects.create(user=self.business_user, title='Website Design', description='Professional website design')
+        expected_str = f"Website Design by {self.business_user.username}"
+        self.assertEqual(str(offer), expected_str)
+    
+    def test_offer_min_price_with_details(self):
+        """Test min_price property returns lowest price."""
+        offer = Offer.objects.create(user=self.business_user, title='Design Services', description='Various design services')
+        OfferDetail.objects.create(offer=offer, title='Basic', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Basic', offer_type='basic')
+        OfferDetail.objects.create(offer=offer, title='Standard', revisions=5, delivery_time_in_days=10, price=Decimal('250.00'), features='Standard', offer_type='standard')
+        OfferDetail.objects.create(offer=offer, title='Premium', revisions=10, delivery_time_in_days=15, price=Decimal('500.00'), features='Premium', offer_type='premium')
+        self.assertEqual(float(offer.min_price), 100.00)
+    
+    def test_offer_min_price_without_details(self):
+        """Test min_price property returns 0 when no details exist."""
+        offer = Offer.objects.create(user=self.business_user, title='Empty Offer', description='No details yet')
+        self.assertEqual(offer.min_price, 0)
+    
+    def test_offer_min_delivery_time_with_details(self):
+        """Test min_delivery_time property returns shortest delivery time."""
+        offer = Offer.objects.create(user=self.business_user, title='Development Services', description='Software development')
+        OfferDetail.objects.create(offer=offer, title='Quick', revisions=2, delivery_time_in_days=3, price=Decimal('200.00'), features='Quick delivery', offer_type='basic')
+        OfferDetail.objects.create(offer=offer, title='Standard', revisions=5, delivery_time_in_days=7, price=Decimal('300.00'), features='Standard', offer_type='standard')
+        OfferDetail.objects.create(offer=offer, title='Detailed', revisions=10, delivery_time_in_days=14, price=Decimal('500.00'), features='Detailed work', offer_type='premium')
+        self.assertEqual(offer.min_delivery_time, 3)
+    
+    def test_offer_min_delivery_time_without_details(self):
+        """Test min_delivery_time property returns 0 when no details exist."""
+        offer = Offer.objects.create(user=self.business_user, title='Empty Offer', description='No details yet')
+        self.assertEqual(offer.min_delivery_time, 0)
+    
+    def test_offer_min_price_single_detail(self):
+        """Test min_price with only one detail."""
+        offer = Offer.objects.create(user=self.business_user, title='Single Package', description='One package only')
+        OfferDetail.objects.create(offer=offer, title='Only Package', revisions=5, delivery_time_in_days=7, price=Decimal('175.50'), features='All features', offer_type='standard')
+        self.assertEqual(float(offer.min_price), 175.50)
+    
+    def test_offer_min_delivery_time_single_detail(self):
+        """Test min_delivery_time with only one detail."""
+        offer = Offer.objects.create(user=self.business_user, title='Single Package', description='One package only')
+        OfferDetail.objects.create(offer=offer, title='Only Package', revisions=5, delivery_time_in_days=12, price=Decimal('200.00'), features='All features', offer_type='standard')
+        self.assertEqual(offer.min_delivery_time, 12)
+    
+    def test_offer_min_price_updates_after_detail_added(self):
+        """Test min_price updates when new cheaper detail is added."""
+        offer = Offer.objects.create(user=self.business_user, title='Evolving Offer', description='Prices change')
+        OfferDetail.objects.create(offer=offer, title='Expensive', revisions=10, delivery_time_in_days=15, price=Decimal('500.00'), features='Premium', offer_type='premium')
+        self.assertEqual(float(offer.min_price), 500.00)
+        OfferDetail.objects.create(offer=offer, title='Cheap', revisions=2, delivery_time_in_days=5, price=Decimal('50.00'), features='Basic', offer_type='basic')
+        self.assertEqual(float(offer.min_price), 50.00)
+    
+    def test_offer_min_delivery_time_updates_after_detail_added(self):
+        """Test min_delivery_time updates when new faster detail is added."""
+        offer = Offer.objects.create(user=self.business_user, title='Evolving Offer', description='Delivery times change')
+        OfferDetail.objects.create(offer=offer, title='Slow', revisions=10, delivery_time_in_days=20, price=Decimal('500.00'), features='Detailed', offer_type='premium')
+        self.assertEqual(offer.min_delivery_time, 20)
+        OfferDetail.objects.create(offer=offer, title='Fast', revisions=2, delivery_time_in_days=2, price=Decimal('200.00'), features='Quick', offer_type='basic')
+        self.assertEqual(offer.min_delivery_time, 2)
+    
+    def test_offer_created_at_auto_set(self):
+        """Test created_at is automatically set."""
+        offer = Offer.objects.create(user=self.business_user, title='Test Offer', description='Test')
+        self.assertIsNotNone(offer.created_at)
+    
+    def test_offer_updated_at_auto_set(self):
+        """Test updated_at is automatically set."""
+        offer = Offer.objects.create(user=self.business_user, title='Test Offer', description='Test')
+        self.assertIsNotNone(offer.updated_at)
+    
+    def test_offer_ordering_by_created_at(self):
+        """Test offers are ordered by created_at descending."""
+        offer1 = Offer.objects.create(user=self.business_user, title='First Offer', description='First')
+        offer2 = Offer.objects.create(user=self.business_user, title='Second Offer', description='Second')
+        offer3 = Offer.objects.create(user=self.business_user, title='Third Offer', description='Third')
+        offers = Offer.objects.all()
+        self.assertEqual(offers[0].id, offer3.id)
+        self.assertEqual(offers[1].id, offer2.id)
+        self.assertEqual(offers[2].id, offer1.id)
+    
+    def test_offer_cascade_delete_details(self):
+        """Test deleting offer cascades to details."""
+        offer = Offer.objects.create(user=self.business_user, title='Test Offer', description='Test')
+        detail1 = OfferDetail.objects.create(offer=offer, title='Detail 1', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Features', offer_type='basic')
+        detail2 = OfferDetail.objects.create(offer=offer, title='Detail 2', revisions=5, delivery_time_in_days=10, price=Decimal('200.00'), features='Features', offer_type='standard')
+        offer_id = offer.id
+        detail1_id = detail1.id
+        detail2_id = detail2.id
+        offer.delete()
+        self.assertFalse(Offer.objects.filter(id=offer_id).exists())
+        self.assertFalse(OfferDetail.objects.filter(id=detail1_id).exists())
+        self.assertFalse(OfferDetail.objects.filter(id=detail2_id).exists())
+
+
+class OfferDetailModelTests(APITestCase):
+    """Tests for OfferDetail model properties and methods."""
+    
+    @classmethod
+    def setUpTestData(cls):
+        cls.business_user = User.objects.create_user(username='business1', email='business1@test.com', password='TestPass123!', type='business')
+        cls.offer = Offer.objects.create(user=cls.business_user, title='Test Offer', description='Test description')
+    
+    def test_offerdetail_str_method(self):
+        """Test OfferDetail __str__ method."""
+        detail = OfferDetail.objects.create(offer=self.offer, title='Basic Package', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Features', offer_type='basic')
+        expected_str = f"{self.offer.title} - Basic Package"
+        self.assertEqual(str(detail), expected_str)
+    
+    def test_offerdetail_created_at_auto_set(self):
+        """Test created_at is automatically set."""
+        detail = OfferDetail.objects.create(offer=self.offer, title='Package', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Features', offer_type='basic')
+        self.assertIsNotNone(detail.created_at)
+    
+    def test_offerdetail_updated_at_auto_set(self):
+        """Test updated_at is automatically set."""
+        detail = OfferDetail.objects.create(offer=self.offer, title='Package', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Features', offer_type='basic')
+        self.assertIsNotNone(detail.updated_at)
+    
+    def test_offerdetail_ordering_by_price(self):
+        """Test offer details are ordered by price ascending."""
+        detail1 = OfferDetail.objects.create(offer=self.offer, title='Expensive', revisions=10, delivery_time_in_days=15, price=Decimal('500.00'), features='Premium', offer_type='premium')
+        detail2 = OfferDetail.objects.create(offer=self.offer, title='Cheap', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Basic', offer_type='basic')
+        detail3 = OfferDetail.objects.create(offer=self.offer, title='Medium', revisions=5, delivery_time_in_days=10, price=Decimal('250.00'), features='Standard', offer_type='standard')
+        details = OfferDetail.objects.filter(offer=self.offer)
+        self.assertEqual(details[0].id, detail2.id)
+        self.assertEqual(details[1].id, detail3.id)
+        self.assertEqual(details[2].id, detail1.id)
+    
+    def test_offerdetail_default_revisions(self):
+        """Test default revisions value is 0."""
+        detail = OfferDetail.objects.create(offer=self.offer, title='Package', delivery_time_in_days=5, price=Decimal('100.00'), features='Features', offer_type='basic')
+        self.assertEqual(detail.revisions, 0)
+    
+    def test_offerdetail_price_decimal_places(self):
+        """Test price stores decimal values correctly."""
+        detail = OfferDetail.objects.create(offer=self.offer, title='Package', revisions=3, delivery_time_in_days=7, price=Decimal('123.45'), features='Features', offer_type='standard')
+        self.assertEqual(float(detail.price), 123.45)
+    
+    def test_offerdetail_related_name_details(self):
+        """Test offer.details related name works."""
+        detail1 = OfferDetail.objects.create(offer=self.offer, title='Detail 1', revisions=2, delivery_time_in_days=5, price=Decimal('100.00'), features='Features', offer_type='basic')
+        detail2 = OfferDetail.objects.create(offer=self.offer, title='Detail 2', revisions=5, delivery_time_in_days=10, price=Decimal('200.00'), features='Features', offer_type='standard')
+        details = self.offer.details.all()
+        self.assertEqual(details.count(), 2)
+        self.assertIn(detail1, details)
+        self.assertIn(detail2, details)
         
