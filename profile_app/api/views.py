@@ -5,8 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 from django.http import Http404
+
 from profile_app.models import Profile
-from .serializers import ProfileSerializer, ProfileListSerializer, ProfileUpdateSerializer
+from .serializers import (
+    ProfileSerializer,
+    ProfileListSerializer,
+    ProfileUpdateSerializer
+)
 from .permissions import IsOwnerOrReadOnly
 
 User = get_user_model()
@@ -15,29 +20,29 @@ User = get_user_model()
 class ProfileDetailUpdateView(generics.RetrieveUpdateAPIView):
     """
     API endpoint to retrieve and update a user's profile.
-    
+
     GET /api/profile/{pk}/ - Anyone authenticated can view
     PATCH /api/profile/{pk}/ - Only owner can update
     """
-    
+
     queryset = Profile.objects.select_related('user').all()
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     lookup_field = 'user__id'
     lookup_url_kwarg = 'pk'
     http_method_names = ['get', 'patch', 'options', 'head']
-    
+
     def get_serializer_class(self):
         """Use different serializers for GET and PATCH."""
         if self.request.method == 'PATCH':
             return ProfileUpdateSerializer
         return ProfileSerializer
-    
+
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve profile by user ID.
-        
+
         GET /api/profile/{pk}/
-        
+
         Returns:
             200: Profile data successfully retrieved
             401: User not authenticated
@@ -48,31 +53,31 @@ class ProfileDetailUpdateView(generics.RetrieveUpdateAPIView):
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
         except Http404:
             return Response(
                 {'detail': 'Profile not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         except Profile.DoesNotExist:
             return Response(
                 {'detail': 'Profile not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         except Exception as e:
             return Response(
                 {'error': 'Internal server error', 'detail': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     def update(self, request, *args, **kwargs):
         """
         Update profile fields (partial update).
-        
+
         PATCH /api/profile/{pk}/
-        
+
         Returns:
             200: Profile successfully updated
             401: User not authenticated
@@ -82,35 +87,45 @@ class ProfileDetailUpdateView(generics.RetrieveUpdateAPIView):
         """
         try:
             instance = self.get_object()
-            
+
             self.check_object_permissions(request, instance)
-            
-            serializer = self.get_serializer(instance, data=request.data, partial=True)
-            
+
+            serializer = self.get_serializer(
+                instance,
+                data=request.data,
+                partial=True
+            )
+
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         except PermissionDenied:
             return Response(
-                {'detail': 'You do not have permission to perform this action.'},
+                {
+                    'detail': 'You do not have permission to perform '
+                              'this action.'
+                },
                 status=status.HTTP_403_FORBIDDEN
             )
-        
+
         except Http404:
             return Response(
                 {'detail': 'Profile not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         except Profile.DoesNotExist:
             return Response(
                 {'detail': 'Profile not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         except Exception as e:
             return Response(
                 {'error': 'Internal server error', 'detail': str(e)},
@@ -121,21 +136,23 @@ class ProfileDetailUpdateView(generics.RetrieveUpdateAPIView):
 class BusinessProfileListView(generics.ListAPIView):
     """
     API endpoint to list all business user profiles.
-    
+
     GET /api/profiles/business/
     """
-    
+
     serializer_class = ProfileListSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         """Filter profiles to only return business users."""
-        return Profile.objects.filter(user__type='business').select_related('user')
-    
+        return Profile.objects.filter(
+            user__type='business'
+        ).select_related('user')
+
     def list(self, request, *args, **kwargs):
         """
         List all business profiles.
-        
+
         Returns:
             200: List of business profiles
             401: User not authenticated
@@ -145,7 +162,7 @@ class BusinessProfileListView(generics.ListAPIView):
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
         except Exception as e:
             return Response(
                 {'error': 'Internal server error', 'detail': str(e)},
@@ -156,21 +173,23 @@ class BusinessProfileListView(generics.ListAPIView):
 class CustomerProfileListView(generics.ListAPIView):
     """
     API endpoint to list all customer user profiles.
-    
+
     GET /api/profiles/customer/
     """
-    
+
     serializer_class = ProfileListSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         """Filter profiles to only return customer users."""
-        return Profile.objects.filter(user__type='customer').select_related('user')
-    
+        return Profile.objects.filter(
+            user__type='customer'
+        ).select_related('user')
+
     def list(self, request, *args, **kwargs):
         """
         List all customer profiles.
-        
+
         Returns:
             200: List of customer profiles
             401: User not authenticated
@@ -180,7 +199,7 @@ class CustomerProfileListView(generics.ListAPIView):
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
         except Exception as e:
             return Response(
                 {'error': 'Internal server error', 'detail': str(e)},
