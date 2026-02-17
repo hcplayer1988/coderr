@@ -4,13 +4,14 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import PermissionDenied
-from django.db.models import Min, Q
+from django.db.models import Min
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 
 from offer_app.models import Offer, OfferDetail
 from .serializers import (
     OfferListSerializer,
+    OfferRetrieveSerializer,
     OfferCreateSerializer,
     OfferUpdateSerializer,
     OfferDetailSingleSerializer
@@ -47,18 +48,12 @@ class OfferListCreateView(generics.ListCreateAPIView):
         filters.SearchFilter,
         filters.OrderingFilter
     ]
-
     search_fields = ['title', 'description']
-
     ordering_fields = ['updated_at', 'created_at']
     ordering = ['-created_at']
 
     def get_permissions(self):
-        """
-        GET requests don't need authentication.
-
-        POST requests need authentication.
-        """
+        """GET requests don't need authentication, POST does."""
         if self.request.method == 'POST':
             return [IsAuthenticated()]
         return [AllowAny()]
@@ -168,7 +163,7 @@ class OfferListCreateView(generics.ListCreateAPIView):
             serializer = self.get_serializer(data=request.data)
 
             if serializer.is_valid():
-                offer = serializer.save(user=request.user)
+                serializer.save(user=request.user)
                 return Response(
                     serializer.data,
                     status=status.HTTP_201_CREATED
@@ -190,8 +185,8 @@ class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
     """
     API endpoint to retrieve, update, and delete a single offer.
 
-    GET /api/offers/{id}/ - Retrieve offer (authenticated users)
-    PATCH /api/offers/{id}/ - Update offer (owner only)
+    GET /api/offers/{id}/    - Retrieve offer (authenticated users)
+    PATCH /api/offers/{id}/  - Update offer (owner only)
     DELETE /api/offers/{id}/ - Delete offer (owner only)
     """
 
@@ -201,24 +196,29 @@ class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = 'id'
 
     def get_permissions(self):
-        """
-        GET requests need authentication.
-
-        PATCH and DELETE requests need authentication + ownership.
-        """
+        """GET needs authentication. PATCH/DELETE need ownership."""
         if self.request.method in ['PATCH', 'DELETE']:
             return [IsAuthenticated(), IsOfferOwner()]
         return [IsAuthenticated()]
 
     def get_serializer_class(self):
-        """Use different serializers for GET and PATCH."""
+        """
+        Use different serializers per method.
+
+        GET    → OfferRetrieveSerializer (no user_details)
+        PATCH  → OfferUpdateSerializer
+        """
         if self.request.method == 'PATCH':
             return OfferUpdateSerializer
-        return OfferListSerializer
+        return OfferRetrieveSerializer
 
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve a single offer by ID.
+
+        Response fields: id, user, title, image, description,
+                         created_at, updated_at, details[{id,url}],
+                         min_price, min_delivery_time
 
         Returns:
             200: Offer details
@@ -247,6 +247,9 @@ class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
         """
         Update an existing offer (partial update).
 
+        Response fields: id, title, image, description,
+                         details[vollständige Objekte]
+
         Returns:
             200: Offer successfully updated
             400: Validation errors or invalid detail IDs
@@ -256,7 +259,6 @@ class OfferDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
             500: Internal server error
         """
         try:
-            partial = kwargs.pop('partial', False)
             instance = self.get_object()
 
             serializer = self.get_serializer(
@@ -351,6 +353,9 @@ class OfferDetailSingleView(generics.RetrieveAPIView):
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve a single offer detail by ID.
+
+        Response fields: id, title, revisions, delivery_time_in_days,
+                         price (int), features (list), offer_type
 
         Returns:
             200: Offer detail data
