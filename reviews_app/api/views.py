@@ -67,9 +67,19 @@ class ReviewListCreateView(generics.ListCreateAPIView):
             201: Review created successfully
             400: Validation errors
             401: User not authenticated
+            403: User is not a customer (business users forbidden)
             500: Internal server error
         """
         try:
+            if request.user.type != 'customer':
+                return Response(
+                    {
+                        'detail': 'Only users with a customer profile can '
+                                  'create reviews.'
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             serializer = self.get_serializer(
                 data=request.data,
                 context={'request': request}

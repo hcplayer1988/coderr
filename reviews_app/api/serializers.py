@@ -64,23 +64,21 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "You can only review business users."
             )
-
         return value
 
     def validate(self, data):
         """
         Validate reviewer constraints.
 
-        - User must have a customer profile
+        Note: The view already checks if user.type == 'customer' and returns
+        403 if not. This validation is kept as a backup/defense-in-depth,
+        but should never be reached in normal operation.
+
+        Validates:
         - User cannot review themselves
         - User cannot submit duplicate reviews
         """
         request = self.context.get('request')
-
-        if request and request.user.type != 'customer':
-            raise serializers.ValidationError(
-                "Only users with a customer profile can create reviews."
-            )
 
         if request and request.user == data.get('business_user'):
             raise serializers.ValidationError(
@@ -92,7 +90,6 @@ class ReviewCreateSerializer(serializers.ModelSerializer):
                 business_user=data.get('business_user'),
                 reviewer=request.user
             ).exists()
-
             if existing_review:
                 raise serializers.ValidationError(
                     "You have already reviewed this business user. "

@@ -29,9 +29,10 @@ class OrderListSerializer(serializers.ModelSerializer):
             'features',
             'offer_type',
             'status',
-            'created_at'
+            'created_at',
+            'updated_at'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_features(self, obj):
         """Ensure features is returned as a list."""

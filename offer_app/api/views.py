@@ -82,7 +82,10 @@ class OfferListCreateView(generics.ListCreateAPIView):
                     details__price__gte=min_price_value
                 ).distinct()
             except (ValueError, TypeError):
-                pass
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({
+                    'min_price': 'Must be a valid number.'
+                })
 
         max_delivery_time = self.request.query_params.get(
             'max_delivery_time',
@@ -95,7 +98,10 @@ class OfferListCreateView(generics.ListCreateAPIView):
                     details__delivery_time_in_days__lte=max_time_value
                 ).distinct()
             except (ValueError, TypeError):
-                pass
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({
+                    'max_delivery_time': 'Must be a valid integer.'
+                })
 
         ordering = self.request.query_params.get('ordering', None)
         if ordering:
