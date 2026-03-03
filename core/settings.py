@@ -11,14 +11,11 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
-from decouple import config
-import os
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/media/'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -29,7 +26,7 @@ SECRET_KEY = config('DJANGO_SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
 
 
 # Application definition
@@ -66,19 +63,16 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CSRF_TRUSTED_ORIGINS = [   
-    'http://127.0.0.1:5500', 
-    'http://localhost:5500',
-]
+# CORS and CSRF settings from environment
+_cors_origins = config('CORS_ALLOWED_ORIGINS', default='', cast=Csv())
+
+CSRF_TRUSTED_ORIGINS = _cors_origins.copy() if _cors_origins else []
 
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_PREFLIGHT_MAX_AGE = 86400
 
-CORS_ALLOWED_ORIGINS = [ 
-    'http://127.0.0.1:5500',     
-    'http://localhost:5500',
-]
+CORS_ALLOWED_ORIGINS = _cors_origins if _cors_origins else []
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -169,6 +163,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = config('STATIC_ROOT', default=str(BASE_DIR / 'staticfiles'))
+
+# Media files (User-Uploads: Bilder, PDFs, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = config('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
 
 
 REST_FRAMEWORK = {
@@ -190,3 +189,4 @@ REST_FRAMEWORK = {
         'django_filters.rest_framework.DjangoFilterBackend'
     ]
 }
+
