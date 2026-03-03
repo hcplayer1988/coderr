@@ -1,6 +1,7 @@
 """Serializers for profile API endpoints."""
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.conf import settings
 
 from profile_app.models import Profile
 
@@ -56,10 +57,8 @@ class ProfileSerializer(serializers.ModelSerializer):
             if representation.get(field) is None:
                 representation[field] = ''
 
-        if representation.get('file'):
-            representation['file'] = (
-                instance.file.name if instance.file else ''
-            )
+        if instance.file:
+            representation['file'] = settings.MEDIA_URL + instance.file.name
         else:
             representation['file'] = ''
 
@@ -113,10 +112,8 @@ class ProfileListSerializer(serializers.ModelSerializer):
             if representation.get(field) is None:
                 representation[field] = ''
 
-        if representation.get('file'):
-            representation['file'] = (
-                instance.file.name if instance.file else ''
-            )
+        if instance.file:
+            representation['file'] = settings.MEDIA_URL + instance.file.name
         else:
             representation['file'] = ''
 
@@ -188,10 +185,8 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             if representation.get(field) is None:
                 representation[field] = ''
 
-        if representation.get('file'):
-            representation['file'] = (
-                instance.file.name if instance.file else ''
-            )
+        if instance.file:
+            representation['file'] = settings.MEDIA_URL + instance.file.name
         else:
             representation['file'] = ''
 
