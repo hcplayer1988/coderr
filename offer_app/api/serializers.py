@@ -1,6 +1,7 @@
 """Serializers for offer API endpoints."""
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.conf import settings
 
 from offer_app.models import Offer, OfferDetail
 
@@ -61,6 +62,13 @@ def parse_features(features_value):
             return [f.strip() for f in stripped.split(',') if f.strip()]
 
     return []
+
+
+def get_image_url(image_field):
+    """Helper function to get the correct image URL with media prefix."""
+    if image_field:
+        return settings.MEDIA_URL + image_field.name
+    return None
 
 
 class OfferDetailSerializer(serializers.ModelSerializer):
@@ -297,12 +305,7 @@ class OfferRetrieveSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """Override to handle image field."""
         representation = super().to_representation(instance)
-        if representation.get('image'):
-            representation['image'] = (
-                instance.image.name if instance.image else None
-            )
-        else:
-            representation['image'] = None
+        representation['image'] = get_image_url(instance.image)
         return representation
 
 
@@ -370,14 +373,7 @@ class OfferListSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """Override to handle image field."""
         representation = super().to_representation(instance)
-
-        if representation.get('image'):
-            representation['image'] = (
-                instance.image.name if instance.image else None
-            )
-        else:
-            representation['image'] = None
-
+        representation['image'] = get_image_url(instance.image)
         return representation
 
 
@@ -440,7 +436,7 @@ class OfferCreateSerializer(serializers.ModelSerializer):
         return {
             'id': instance.id,
             'title': instance.title,
-            'image': instance.image.name if instance.image else None,
+            'image': get_image_url(instance.image),
             'description': instance.description,
             'details': OfferDetailSerializer(
                 details_queryset,
@@ -571,7 +567,7 @@ class OfferUpdateSerializer(serializers.ModelSerializer):
         return {
             'id': instance.id,
             'title': instance.title,
-            'image': instance.image.name if instance.image else None,
+            'image': get_image_url(instance.image),
             'description': instance.description,
             'details': OfferDetailResponseSerializer(
                 details_queryset,
